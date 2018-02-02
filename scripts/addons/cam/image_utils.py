@@ -1586,7 +1586,6 @@ def renderSampleImage(o):
 	
 
 	if o.geometry_source=='OBJECT' or o.geometry_source=='GROUP':
-		pixsize=o.pixsize
 
 		sx=o.max.x-o.min.x
 		sy=o.max.y-o.min.y

@@ -50,7 +50,10 @@ def timingadd(tinf):
 	tinf[0]+=t-tinf[1]
 
 def timingprint(tinf):
-	print('time '+str(tinf[0])+'seconds')
+	print('time {:.3f} seconds'.format(tinf[0]))
+	
+def printTimeElapsed(t):
+	print('time elapsed: {:.3f} seconds'.format(time.time()-t))
 	
 def progress(text,n=None):
 	'''function for reporting during the script, works for background operations in the header.'''

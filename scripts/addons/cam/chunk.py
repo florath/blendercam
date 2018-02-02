@@ -527,7 +527,7 @@ def optimizeChunk(chunk,operation):
 			#vmiddle=Vector()
 			#v1=Vector()
 			#v2=Vector()
-			if not compare(chunk.points[-1],points[vi+1],points[vi],operation.optimize_threshold*0.000001):
+			if not compare(chunk.points[-1],points[vi+1],points[vi],operation.optimize_threshold):
 				if naxispoints:
 					chunk.append(points[vi],startpoints[vi],endpoints[vi],rotations[vi])
 				else:
@@ -955,11 +955,11 @@ def meshFromCurve(o, use_modifiers = False):
 
 	co=bpy.context.active_object
 	print(co.name)
-	if co.type=='FONT':#support for text objects is only and only here, just convert them to curves.
-		bpy.ops.object.convert(target='CURVE', keep_original=False)
-	co.data.dimensions='3D'
-	co.data.bevel_depth=0
-	co.data.extrude=0
+	#if co.type=='FONT':#support for text objects is only and only here, just convert them to curves.
+	#	bpy.ops.object.convert(target='CURVE', keep_original=False)
+	#co.data.dimensions = '3D'
+	co.data.bevel_depth = 0
+	co.data.extrude = 0
 
 
 	#first, convert to mesh to avoid parenting issues with hooks, then apply locrotscale.
@@ -1039,84 +1039,28 @@ def chunkToShapely(chunk):
 	p=spolygon.Polygon(chunk.points)
 	return p	
 	
-def chunksRefine(chunks,o):
+def chunksTessalate(chunks, distance):
 	'''add extra points in between for chunks'''
-	for ch in chunks:
-		#print('before',len(ch))
-		newchunk=[]
-		v2=Vector(ch.points[0])
-		#print(ch.points)
-		for s in ch.points:
-			
-			v1=Vector(s)
-			#print(v1,v2)
-			v=v1-v2
-			
-			#print(v.length,o.dist_along_paths)
-			if v.length>o.dist_along_paths:
-				d=v.length
-				v.normalize()
-				i=0
-				vref=Vector((0,0,0))
+	if distance > 0:   
+		for ch in chunks:
+			newchunk = []
+			vprev = Vector(ch.points[0])
+			for s in ch.points:
+				vnext = Vector(s)
+				v = vnext - vprev
+				d = v.length
 				
-				while vref.length<d:
-					i+=1
-					vref=v*o.dist_along_paths*i
-					if vref.length<d:
-						p=v2+vref
-						
-						newchunk.append((p.x,p.y,p.z))
-					
-					
-			newchunk.append(s)  
-			v2=v1
-		#print('after',len(newchunk))
-		ch.points=newchunk
-			
-	return chunks
+				if d > distance:
+					v.normalize()
+					i = round(d / distance + 0.5)
+					voff = v * (d / i)
+					while i > 1:
+						vprev += voff
+						newchunk.append((vprev.x, vprev.y, vprev.z))
+						i -= 1
 
-		
-def chunksRefineThreshold(chunks,distance, limitdistance):
-	'''add extra points in between for chunks. For medial axis strategy only !'''
-	for ch in chunks:
-		#print('before',len(ch))
-		newchunk=[]
-		v2=Vector(ch.points[0])
-		#print(ch.points)
-		for s in ch.points:
-			
-			v1=Vector(s)
-			#print(v1,v2)
-			v=v1-v2
-			
-			#print(v.length,o.dist_along_paths)
-			if v.length>limitdistance:
-				d=v.length
-				v.normalize()
-				i=1
-				vref=Vector((0,0,0))
-				vhalf = v*d/2
-				while vref.length<d/2:
-					
-					vref=v*distance*i
-					if vref.length<d:
-						p=v2+vref
-						
-						newchunk.append((p.x,p.y,p.z))
-					i+=1
-					vref=v*distance*i#because of the condition, so it doesn't run again.
-				while i>0:
-					vref=v*distance*i
-					if vref.length<d:
-						p=v1-vref
-						
-						newchunk.append((p.x,p.y,p.z))
-					i-=1
-					vref=v*distance*i 
-					
-			newchunk.append(s)  
-			v2=v1
-		#print('after',len(newchunk))
-		ch.points=newchunk
+				newchunk.append(s)  
+				vprev = vnext
+			ch.points = newchunk
 			
 	return chunks

@@ -77,7 +77,7 @@ class CAM_CUTTER_Panel(CAMButtonsPanel, bpy.types.Panel):
 					layout.prop_search(ao, "cutter_object_name", bpy.data, "objects")
 				
 				layout.prop(ao,'cutter_diameter')
-				#layout.prop(ao,'cutter_length')
+				layout.prop(ao,'cutter_length')
 				layout.prop(ao,'cutter_flutes')
 				layout.prop(ao, 'cutter_description')
 
@@ -142,6 +142,23 @@ class CAM_MACHINE_Panel(CAMButtonsPanel, bpy.types.Panel):
 				layout.prop(ao, 'output_tool_change')
 				if ao.output_tool_change:
 					layout.prop(ao, 'output_g43_on_tool_change')
+
+class CAM_UISETTINGS_Panel(CAMButtonsPanel, bpy.types.Panel):	
+	"""CAM UI settings panel"""
+	bl_label = "CAM UI Settings"
+	bl_idname = "WORLD_PT_CAM_UISETTINGS"
+		
+	COMPAT_ENGINES = {'BLENDERCAM_RENDER'}
+
+	def draw(self, context):
+		layout = self.layout
+		scene = bpy.context.scene
+
+		uiset = scene.cam_ui_settings
+		if uiset:
+			layout.prop(uiset, 'select_opobject')
+			layout.prop(uiset, 'hide_other_toolpaths')
+			
 			
 class CAM_MATERIAL_Panel(CAMButtonsPanel, bpy.types.Panel):	 
 	"""CAM material panel"""
@@ -154,9 +171,9 @@ class CAM_MATERIAL_Panel(CAMButtonsPanel, bpy.types.Panel):
 		layout = self.layout
 		scene=bpy.context.scene
 		
-		if len(scene.cam_operations)==0:
+		if len(scene.cam_operations) < 1:
 			layout.label('Add operation first')
-		if len(scene.cam_operations)>0:
+		else:
 			ao=scene.cam_operations[scene.cam_active_operation]
 			if ao:
 				#print(dir(layout))
@@ -259,10 +276,8 @@ class CAM_CHAINS_Panel(CAMButtonsPanel, bpy.types.Panel):
 
 				if not chain.computing:
 					if chain.valid:
-						pass
-						layout.operator("object.calculate_cam_paths_chain", text="Calculate chain paths")
-						layout.operator("object.cam_export_paths_chain", text="Export chain gcode")
-						#layout.operator("object.calculate_cam_paths_background", text="Calculate path in background")
+						layout.operator("object.calculate_chain_cam_paths")
+						layout.operator("object.export_chain_cam_paths")
 						layout.operator("object.cam_simulate_chain", text="Simulate this chain")
 					else:
 						layout.label("chain invalid, can't compute")
@@ -355,8 +370,6 @@ class CAM_OPERATIONS_Panel(CAMButtonsPanel, bpy.types.Panel):
 
 				if use_experimental and ao.geometry_source in ['OBJECT', 'GROUP']:
 					layout.prop(ao, 'use_modifiers')
-				layout.prop(ao, 'hide_all_others')
-				
 
 									 
 class CAM_INFO_Panel(CAMButtonsPanel, bpy.types.Panel):
@@ -370,9 +383,9 @@ class CAM_INFO_Panel(CAMButtonsPanel, bpy.types.Panel):
 		layout = self.layout
 		scene=bpy.context.scene
 		row = layout.row() 
-		if len(scene.cam_operations)==0:
+		if len(scene.cam_operations) < 1:
 			layout.label('Add operation first')
-		if len(scene.cam_operations)>0:
+		else:
 			ao=scene.cam_operations[scene.cam_active_operation]
 			if ao.warnings!='':
 				lines=ao.warnings.split('\n')
@@ -381,8 +394,14 @@ class CAM_INFO_Panel(CAMButtonsPanel, bpy.types.Panel):
 			if ao.valid:
 				if ao.duration>0:
 					layout.label('operation time: ' + str(int(ao.duration/60)) + \
-					 ' hour, ' + str(int(ao.duration)%60) + ' min, ' + \
-					 str(int(ao.duration*60)%60) + ' sec.')	   
+						' hour, ' + str(int(ao.duration)%60) + ' min, ' + \
+						str(int(ao.duration*60)%60) + ' sec.')
+						
+					layout.prop(ao, 'max_cutdepth')
+					if ao.max_cutdepth < ao.maxz:
+						cutterload = int((ao.maxz - ao.max_cutdepth) / ao.cutter_length * 100.0)
+						layout.label(text = str(cutterload) + '% cutter length' , icon='COLOR_RED' if (cutterload>100) else 'COLOR_GREEN' )
+
 				layout.label(  'chipload: '+ strInUnits(ao.chipload,4) + ' / tooth')
 				
 		
@@ -402,9 +421,9 @@ class CAM_OPERATION_PROPERTIES_Panel(CAMButtonsPanel, bpy.types.Panel):
 		use_experimental=bpy.context.user_preferences.addons['cam'].preferences.experimental
 			
 		row = layout.row() 
-		if len(scene.cam_operations)==0:
+		if len(scene.cam_operations) < 1:
 			layout.label('Add operation first')
-		if len(scene.cam_operations)>0:
+		else:
 			ao=scene.cam_operations[scene.cam_active_operation]
 			if ao.valid:
 				if use_experimental:
@@ -445,14 +464,18 @@ class CAM_OPERATION_PROPERTIES_Panel(CAMButtonsPanel, bpy.types.Panel):
 					if use_experimental:
 						layout.prop(ao,'outlines_count')
 						if ao.outlines_count>1:
-							layout.prop(ao,'dist_between_paths')
+							row = layout.row()
+							row.prop(ao,'dist_between_paths')
+							row.prop(ao,'stepover_perc')
 							layout.prop(ao,'movement_insideout')
 					layout.prop(ao,'dont_merge')
 				elif ao.strategy=='WATERLINE':
 					layout.prop(ao,'slice_detail')	
 					layout.prop(ao,'waterline_fill')  
 					if ao.waterline_fill:
-						layout.prop(ao,'dist_between_paths')			
+						row = layout.row()
+						row.prop(ao,'dist_between_paths')			
+						row.prop(ao,'stepover_perc')
 						layout.prop(ao,'waterline_project')
 					layout.prop(ao,'inverse')
 				elif ao.strategy=='CARVE':
@@ -461,24 +484,27 @@ class CAM_OPERATION_PROPERTIES_Panel(CAMButtonsPanel, bpy.types.Panel):
 				elif ao.strategy=='PENCIL':
 					layout.prop(ao,'dist_along_paths')
 					layout.prop(ao,'pencil_threshold')
-				elif ao.strategy=='MEDIAL_AXIS':
-					layout.prop(ao,'medial_axis_threshold')
-					layout.prop(ao,'medial_axis_subdivision')
 				elif ao.strategy=='CRAZY':
 					layout.prop(ao,'crazy_threshold1')
 					layout.prop(ao,'crazy_threshold5')
 					layout.prop(ao,'crazy_threshold2')
 					layout.prop(ao,'crazy_threshold3')
 					layout.prop(ao,'crazy_threshold4')
-					layout.prop(ao,'dist_between_paths')
+					row = layout.row()
+					row.prop(ao,'dist_between_paths')
+					row.prop(ao,'stepover_perc')
 					layout.prop(ao,'dist_along_paths')
 				elif ao.strategy=='DRILL':
 					layout.prop(ao,'drill_type')
 				elif ao.strategy=='POCKET':
 					layout.prop(ao,'pocket_option')
-					layout.prop(ao,'dist_between_paths')
-				else:				 
-					layout.prop(ao,'dist_between_paths')
+					row = layout.row()
+					row.prop(ao,'dist_between_paths')
+					row.prop(ao,'stepover_perc')
+				else:
+					row = layout.row()
+					row.prop(ao,'dist_between_paths')
+					row.prop(ao,'stepover_perc')
 					layout.prop(ao,'dist_along_paths')
 					if ao.strategy=='PARALLEL' or ao.strategy=='CROSS':
 						layout.prop(ao,'parallel_angle')
@@ -535,9 +561,9 @@ class CAM_MOVEMENT_Panel(CAMButtonsPanel, bpy.types.Panel):
 		use_experimental = bpy.context.user_preferences.addons['cam'].preferences.experimental
 		
 		row = layout.row() 
-		if len(scene.cam_operations)==0:
+		if len(scene.cam_operations) < 1:
 			layout.label('Add operation first')
-		if len(scene.cam_operations)>0:
+		else:
 			ao=scene.cam_operations[scene.cam_active_operation]
 			if ao.valid:
 				layout.prop(ao,'movement_type')
@@ -591,14 +617,16 @@ class CAM_FEEDRATE_Panel(CAMButtonsPanel, bpy.types.Panel):
 		layout = self.layout
 		scene=bpy.context.scene
 		row = layout.row() 
-		if len(scene.cam_operations)==0:
+		if len(scene.cam_operations) < 1:
 			layout.label('Add operation first')
-		if len(scene.cam_operations)>0:
+		else:
 			ao=scene.cam_operations[scene.cam_active_operation]
 			if ao.valid:
 				layout.prop(ao,'feedrate')
 				layout.prop(ao,'do_simulation_feedrate')
-				layout.prop(ao,'plunge_feedrate')
+				row = layout.row()
+				row.prop(ao,'plunge_feedrate_val')
+				row.prop(ao,'plunge_feedrate_perc')
 				layout.prop(ao,'plunge_angle')
 				layout.prop(ao,'spindle_rpm')
 
@@ -617,20 +645,21 @@ class CAM_OPTIMISATION_Panel(CAMButtonsPanel, bpy.types.Panel):
 		
 			
 		row = layout.row() 
-		if len(scene.cam_operations)==0:
+		if len(scene.cam_operations) < 1:
 			layout.label('Add operation first')
-		if len(scene.cam_operations)>0:
+		else:
 			ao=scene.cam_operations[scene.cam_active_operation]
 			if ao.valid: 
 				layout.prop(ao,'optimize')
 				if ao.optimize:
 					layout.prop(ao,'optimize_threshold')
 				if ao.geometry_source=='OBJECT' or ao.geometry_source=='GROUP':
-					exclude_exact = ao.strategy in ['WATERLINE', 'POCKET', 'CUTOUT', 'DRILL', 'PENCIL']
+					exclude_exact = ao.strategy in ['WATERLINE', 'POCKET', 'CUTOUT', 'DRILL', 'PENCIL', 'MEDIAL_AXIS']
 					if not exclude_exact:
 						layout.prop(ao,'use_exact')
 						if ao.use_exact:
 							layout.prop(ao,'exact_subdivide_edges')
+							layout.prop(ao,'use_opencamlib')
 					if exclude_exact or not ao.use_exact:
 						layout.prop(ao,'pixsize')
 						layout.prop(ao,'imgres_limit')
@@ -639,12 +668,10 @@ class CAM_OPTIMISATION_Panel(CAMButtonsPanel, bpy.types.Panel):
 						sy=ao.max.y-ao.min.y
 						resx=int(sx/ao.pixsize)
 						resy=int(sy/ao.pixsize)
-						l='resolution: '+str(resx)+' x '+str(resy)
-						layout.label( l)
+						layout.label('image size in pixels: '+str(resx)+' x '+str(resy)+' = '+str(resx * resy))
 					
 				layout.prop(ao,'simulation_detail')
 				layout.prop(ao,'circle_detail')
-				layout.prop(ao,'use_opencamlib')
 				#if not ao.use_exact:#this will be replaced with groups of objects.
 				#layout.prop(ao,'render_all')# replaced with groups support
 		
@@ -660,9 +687,9 @@ class CAM_AREA_Panel(CAMButtonsPanel, bpy.types.Panel):
 		layout = self.layout
 		scene=bpy.context.scene
 		row = layout.row() 
-		if len(scene.cam_operations)==0:
+		if len(scene.cam_operations) < 1:
 			layout.label('Add operation first')
-		if len(scene.cam_operations)>0:
+		else:
 			ao=scene.cam_operations[scene.cam_active_operation]
 			if ao.valid:
 				#o=bpy.data.objects[ao.object_name]
@@ -717,9 +744,9 @@ class CAM_GCODE_Panel(CAMButtonsPanel, bpy.types.Panel):
 		layout = self.layout
 		scene=bpy.context.scene
 		row = layout.row() 
-		if len(scene.cam_operations)==0:
+		if len(scene.cam_operations) < 1:
 			layout.label('Add operation first')
-		if len(scene.cam_operations)>0:
+		else:
 			use_experimental = bpy.context.user_preferences.addons['cam'].preferences.experimental
 			if use_experimental:
 				ao=scene.cam_operations[scene.cam_active_operation]

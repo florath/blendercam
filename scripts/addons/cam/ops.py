@@ -190,7 +190,7 @@ class KillPathsBackground(bpy.types.Operator):
 
 		
 class CalculatePath(bpy.types.Operator):
-	'''calculate CAM paths'''
+	'''calculate CAM paths for selected operation'''
 	bl_idname = "object.calculate_cam_path"
 	bl_label = "Calculate CAM paths"
 	bl_options = {'REGISTER', 'UNDO'}
@@ -213,15 +213,15 @@ class CalculatePath(bpy.types.Operator):
 		
 		o.operator=self
 		
-		if o.use_layers:
-			o.parallel_step_back = False
+		#if o.use_layers:
+		#	o.parallel_step_back = False
 			
 		utils.getPath(context,o)
 		
 		return {'FINISHED'}
 
 class PathsAll(bpy.types.Operator):
-	'''calculate all CAM paths'''
+	'''calculate CAM paths for all operations'''
 	bl_idname = "object.calculate_cam_paths_all"
 	bl_label = "Calculate all CAM paths"
 	bl_options = {'REGISTER', 'UNDO'}
@@ -285,29 +285,46 @@ def getChainOperations(chain):
 				chop.append(so)
 	return chop
 	
-class PathsChain(bpy.types.Operator):
-	'''calculate a chain and export the gcode alltogether. '''
-	bl_idname = "object.calculate_cam_paths_chain"
-	bl_label = "Calculate CAM paths in current chain and export chain gcode"
+class ExportChain(bpy.types.Operator):
+	'''export gcode for CAM paths in current chain'''
+	bl_idname = "object.export_chain_cam_paths"
+	bl_label = "Export Chain paths to G-Code"
 	bl_options = {'REGISTER', 'UNDO'}
 
 	def execute(self, context):
 		import bpy
-		s=bpy.context.scene
+		s = bpy.context.scene
 		
-		chain=s.cam_chains[s.cam_active_chain]
-		chainops=getChainOperations(chain)
-		meshes=[]
-		
-		#if len(chainops)<4:
-		for i in range(0,len(chainops)):
-			s.cam_active_operation = s.cam_operations.find(chainops[i].name)
-			bpy.ops.object.calculate_cam_path()
-			
+		chain = s.cam_chains[s.cam_active_chain]
+		chainops = getChainOperations(chain)
+		meshes = []
 		for o in chainops:
 			#bpy.ops.object.calculate_cam_paths_background()
 			meshes.append(bpy.data.objects[o.path_object_name].data)
-		utils.exportGcodePath(chain.filename,meshes,chainops)
+			
+		utils.exportGcodePath(chain.filename, meshes, chainops)
+		
+		return {'FINISHED'}
+
+class CalculateChain(bpy.types.Operator):
+	'''Calculate CAM paths in current chain and export to gcode'''
+	bl_idname = "object.calculate_chain_cam_paths"
+	bl_label = "Calculate Paths for Chain"
+	bl_options = {'REGISTER', 'UNDO'}
+
+	def execute(self, context):
+		import bpy
+		s = bpy.context.scene
+		
+		chain = s.cam_chains[s.cam_active_chain]
+		chainops = getChainOperations(chain)
+		
+		for i in range(0,len(chainops)):
+			s.cam_active_operation = s.cam_operations.find(chainops[i].name)
+			bpy.ops.object.calculate_cam_path()
+		
+		bpy.ops.object.export_chain_cam_paths
+
 		return {'FINISHED'}
 
 class PathExportChain(bpy.types.Operator):
@@ -348,8 +365,7 @@ class PathExport(bpy.types.Operator):
 	
 
 class CAMSimulate(bpy.types.Operator):
-	'''simulate CAM operation
-	this is performed by: creating an image, painting Z depth of the brush substractively. Works only for some operations, can not be used for 4-5 axis.'''
+	'''simulate CAM operation.  This is performed by: creating an image, painting Z depth of the brush substractively. Works only for some operations, can not be used for 4-5 axis.'''
 	bl_idname = "object.cam_simulate"
 	bl_label = "CAM simulation"
 	bl_options = {'REGISTER', 'UNDO'}
@@ -636,10 +652,6 @@ class CamOperationRemove(bpy.types.Operator):
 			bpy.ops.object.delete(True)
 		except:
 			pass
-
-		ao = scene.cam_operations[scene.cam_active_operation]
-		if ao.path_object_name in cam.was_hidden_dict:
-			del cam.was_hidden_dict[ao.path_object_name]
 
 		scene.cam_operations.remove(scene.cam_active_operation)
 		if scene.cam_active_operation>0:

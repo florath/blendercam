@@ -62,6 +62,20 @@ from shapely import geometry as sgeometry
 from shapely import affinity, prepared
 #from shapely.geometry import * not possible until Polygon libs gets out finally..
 SHAPELY=True
+progressCount = 0
+
+def progressUpdate():
+	global progressCount
+	progressCount += 1
+	bpy.context.window_manager.progress_update(progressCount)
+	
+def progressBegin():
+	global progressCount
+	progressCount = 0
+	bpy.context.window_manager.progress_begin(0, 9999)
+	
+def progressEnd():
+	bpy.context.window_manager.progress_end()
 	
 def positionObject(operation):
 	ob=bpy.data.objects[operation.object_name]
@@ -72,7 +86,7 @@ def positionObject(operation):
 
 def getBoundsWorldspace(obs, use_modifiers = False):
 	#progress('getting bounds of object(s)')
-	t=time.time()
+	#t=time.time()
 		
 	maxx=maxy=maxz=-10000000
 	minx=miny=minz=10000000
@@ -333,7 +347,6 @@ def samplePathLow(o,ch1,ch2,dosample):
 def sampleChunks(o,pathSamples,layers):
 	#
 	minx,miny,minz,maxx,maxy,maxz=o.min.x,o.min.y,o.min.z,o.max.x,o.max.y,o.max.z
-	getAmbient(o)  
 
 	if o.use_exact:#prepare collision world
 		if o.use_opencamlib:
@@ -397,6 +410,7 @@ def sampleChunks(o,pathSamples,layers):
 		
 		#for t in range(0,threads):
 			
+		progressUpdate()
 		for s in patternchunk.points:
 			if o.strategy!='WATERLINE' and int(100*n/totlen)!=last_percent:
 				last_percent=int(100*n/totlen)
@@ -527,7 +541,7 @@ def sampleChunks(o,pathSamples,layers):
 				layeractivechunks[i]=camPathChunk([])
 				
 			#PARENTING	
-			if (o.strategy=='PARALLEL' or o.strategy=='CROSS' or o.strategy == 'OUTLINEFILL'):
+			if o.strategy in [ 'PARALLEL', 'CROSS', 'OUTLINEFILL']: #
 				timingstart(sortingtime)
 				parentChildDist(thisrunchunks[i], lastrunchunks[i],o)
 				timingadd(sortingtime)
@@ -538,7 +552,7 @@ def sampleChunks(o,pathSamples,layers):
 	progress('checking relations between paths')
 	timingstart(sortingtime)
 
-	if (o.strategy=='PARALLEL' or o.strategy=='CROSS' or o.strategy == 'OUTLINEFILL'):
+	if o.strategy in ['PARALLEL', 'CROSS', 'OUTLINEFILL']: #
 		if len(layers)>1:# sorting help so that upper layers go first always
 			for i in range(0,len(layers)-1):
 				parents=[]
@@ -944,7 +958,7 @@ def chunksToMesh(chunks,o):
 	for chi in range(0,len(chunks)):
 		
 		#print(chi)
-		
+		progressUpdate()
 		ch=chunks[chi]
 		#print(chunks)
 		#print (ch)
@@ -994,7 +1008,7 @@ def chunksToMesh(chunks,o):
 			#print(verts_rotations)
 	if o.use_exact and not o.use_opencamlib:
 		cleanupBulletCollision(o)
-	print(time.time()-t)
+	printTimeElapsed(t)
 	t=time.time()
 	
 	#actual blender object generation starts here:
@@ -1029,13 +1043,9 @@ def chunksToMesh(chunks,o):
 			
 		for i,co in enumerate(verts_rotations):#TODO: optimize this. this is just rewritten too many times...
 			#print(r)
-			
 			shapek.data[i].co=co
-			
-
-	
 		
-	print(time.time()-t)
+	printTimeElapsed(t)
 	
 	ob.location=(0,0,0)
 	o.path_object_name=oname
@@ -1052,6 +1062,9 @@ def chunksToMesh(chunks,o):
 		
 def exportGcodePath(filename,vertslist,operations):
 	'''exports gcode with the heeks nc adopted library.'''
+	import importlib
+	
+	from cam.nc import postprocessors
 	
 	progress('exporting gcode file')
 	t=time.time()
@@ -1077,43 +1090,9 @@ def exportGcodePath(filename,vertslist,operations):
 	basefilename=bpy.data.filepath[:-len(bpy.path.basename(bpy.data.filepath))]+safeFileName(filename)
 	
 	
-	extension='.tap'
-	if m.post_processor=='ISO':
-		from .nc import iso as postprocessor
-	if m.post_processor=='MACH3':
-		from .nc import mach3 as postprocessor
-	elif m.post_processor=='EMC':
-		extension = '.ngc'
-		from .nc import emc2b as postprocessor
-	elif m.post_processor=='GRBL':
-		extension = '.ngc'
-		from .nc import grbl as postprocessor
-	elif m.post_processor=='HM50':
-		from .nc import hm50 as postprocessor
-	elif m.post_processor=='HEIDENHAIN':
-		extension='.H'
-		from .nc import heiden as postprocessor
-	elif m.post_processor=='TNC151':
-		from .nc import tnc151 as postprocessor
-	elif m.post_processor=='SIEGKX1':
-		from .nc import siegkx1 as postprocessor
-	elif m.post_processor=='CENTROID':
-		from .nc import centroid1 as postprocessor
-	elif m.post_processor=='ANILAM':
-		from .nc import anilam_crusader_m as postprocessor
-	elif m.post_processor=='GRAVOS':
-		extension = '.nc'
-		from .nc import gravos as postprocessor
-	elif m.post_processor=='WIN-PC' :
-		extension='.din'
-		from .nc import winpc as postprocessor
-	elif m.post_processor=='SHOPBOT MTC':
-		extension='.sbp'
-		from .nc import shopbot_mtc as postprocessor
-	elif m.post_processor=='LYNX_OTTER_O':
-		extension='.nc'
-		from .nc import lynx_otter_o as postprocessor
-	
+	pname, extension = postprocessors[m.post_processor][0:2]
+	postprocessor = importlib.import_module('cam.nc.' + pname)
+
 	if s.unit_settings.system=='METRIC':
 		unitcorr=1000.0
 	elif s.unit_settings.system=='IMPERIAL':
@@ -1220,7 +1199,7 @@ def exportGcodePath(filename,vertslist,operations):
 		millfeedrate=min(o.feedrate,m.feedrate_max)
 		
 		millfeedrate=unitcorr*max(millfeedrate,m.feedrate_min)
-		plungefeedrate= millfeedrate*o.plunge_feedrate/100
+		plungefeedrate= millfeedrate*o.plunge_feedrate_perc/100
 		freefeedrate=m.feedrate_max*unitcorr
 		fadjust=False
 		if o.do_simulation_feedrate and mesh.shape_keys!= None and  mesh.shape_keys.key_blocks.find('feedrates')!=-1:
@@ -1233,16 +1212,18 @@ def exportGcodePath(filename,vertslist,operations):
 		else:		
 			if i<1:
 				last=Vector((0.0,0.0,free_movement_height))#nonsense values so first step of the operation gets written for sure
-		lastrot=Euler((0,0,0))
-		duration=0.0
-		f=0.1123456#nonsense value, so first feedrate always gets written 
+		lastrot = Euler((0,0,0))
+		duration = 0.0
+		f = 0.1123456#nonsense value, so first feedrate always gets written 
 		fadjustval = 1 # if simulation load data is Not present
 		
 		downvector= Vector((0,0,-1))
 		plungelimit=(pi/2-o.plunge_angle)
 		
 		scale_graph=0.05 #warning this has to be same as in export in utils!!!!
+		progressUpdate()
 		
+		minimumz = free_movement_height
 		#print('2')
 		for vi,vert in enumerate(verts):
 			# skip the first vertex if this is a chained operation
@@ -1333,7 +1314,10 @@ def exportGcodePath(filename,vertslist,operations):
 					c.feed( x=vx, y=vy, z=vz ,a = ra, b = rb)
 
 			
-			duration+=vect.length/f
+			duration += vect.length/f
+			newz = v.z * unitcorr
+			if newz < minimumz:
+				minimumz = newz
 			#print(duration)
 			last=v
 			if o.machine_axes!='3':
@@ -1371,14 +1355,13 @@ def exportGcodePath(filename,vertslist,operations):
 			for aline in lines:
 				c.write(aline + '\n')
 			
-	o.duration=duration*unitcorr
-	#print('duration')
-	#print(o.duration)
+		o.duration = duration * unitcorr
+		o.max_cutdepthValue = minimumz / unitcorr
 	
 	
 	c.program_end()
 	c.file_close()
-	print(time.time()-t)
+	printTimeElapsed(t)
 
 def curveToShapely(cob, use_modifiers = False):
 	chunks=curveToChunks(cob, use_modifiers)
@@ -1471,9 +1454,6 @@ def connectChunksLow(chunks,o):
 	if o.strategy=='PENCIL':#this is bigger for pencil path since it goes on the surface to clean up the rests, and can go to close points on the surface without fear of going deep into material.
 		mergedist=10*o.dist_between_paths
 	
-	if o.strategy=='MEDIAL_AXIS':
-		mergedist= 1*o.medial_axis_subdivision
-	
 	if o.parallel_step_back:
 		mergedist*=2
 		
@@ -1543,6 +1523,7 @@ def sortChunks(chunks,o):
 	#print('numofchunks')
 	#print(len(chunks))
 	while len(chunks)>0:
+		progressUpdate()
 		ch=None
 		if len(sortedchunks)==0 or len(lastch.parents)==0:#first chunk or when there are no parents -> parents come after children here...
 			ch = getClosest(o,pos,chunks)
@@ -1687,7 +1668,7 @@ def getOperationSilhouete(operation):
 			
 		
 			
-		if (stype == 'OBJECTS' and totfaces>200000) or stype=='IMAGE':
+		if (stype == 'OBJECTS' and totfaces>200000) or stype=='IMAGE' or (operation.use_modifiers and stype !='CURVES'):
 			print('image method')
 			samples = renderSampleImage(operation)
 			if stype=='OBJECTS':
@@ -1782,7 +1763,7 @@ def getObjectSilhouete(stype, objects=None, use_modifiers = False):
 				print('joining')
 				p=sops.unary_union(bigshapes)
 					
-			print(time.time()-t)
+			printTimeElapsed(t)
 			
 			t=time.time()
 			silhouete = [p]#[polygon_utils_cam.Shapely2Polygon(p)]
@@ -1812,14 +1793,14 @@ def getAmbient(o):
 				if o.ambient_cutter_restrict:
 					o.limit_poly = o.limit_poly.buffer(o.cutter_diameter/2,resolution = o.circle_detail)
 			o.ambient = o.ambient.intersection(o.limit_poly)
-	o.update_ambient_tag=False
+		
+		o.update_ambient_tag = False
 	
 def getObjectOutline(radius,o,Offset):#FIXME: make this one operation independent
 #circle detail, optimize, optimize thresold.
 	
 	polygons=getOperationSilhouete(o)
 	
-	i=0
 	#print('offseting polygons')
 		
 	if Offset:
@@ -1828,16 +1809,17 @@ def getObjectOutline(radius,o,Offset):#FIXME: make this one operation independen
 		offset=-1
 		
 	outlines=[]
-	i=0
 	#print(polygons, polygons.type)
 	for p1 in polygons:#sort by size before this???
-		print(p1.type,len(polygons))
-		i+=1
+		#print(p1.type,len(polygons))
 		if radius>0:
 			p1 = p1.buffer(radius*offset,resolution = o.circle_detail)
-		outlines.append(p1)
+		# if radius * offset is a large negative then could end up with a polygon inside out
+		# only add valid polygons
+		if p1.is_valid:
+			outlines.append(p1)
 	
-	print(outlines)
+	#print(outlines)
 	if o.dont_merge:
 		outline=sgeometry.MultiPolygon(outlines)
 		#for ci in range(0,len(p)):
@@ -1910,7 +1892,7 @@ def addMachineAreaObject():
 	s=bpy.context.scene
 	ao=bpy.context.active_object
 	if s.objects.get('CAM_machine')!=None:
-	   o=s.objects['CAM_machine']
+		 o=s.objects['CAM_machine']
 	else:
 		oldunits = s.unit_settings.system
 		# need to be in metric units when adding machine mesh object
@@ -1938,7 +1920,7 @@ def addMachineAreaObject():
 		o.select=False
 		s.unit_settings.system = oldunits
 	#bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
-	   
+		 
 	o.dimensions=bpy.context.scene.cam_machine.working_area
 	if ao!=None:
 		activate(ao)
@@ -1955,7 +1937,7 @@ def addMaterialAreaObject():
 	
 	ao=bpy.context.active_object
 	if s.objects.get('CAM_material')!=None:
-	   o=s.objects['CAM_material']
+		 o=s.objects['CAM_material']
 	else:
 		bpy.ops.mesh.primitive_cube_add(view_align=False, enter_editmode=False, location=(1, 1, -1), rotation=(0, 0, 0))
 		o=bpy.context.active_object
@@ -1968,7 +1950,7 @@ def addMaterialAreaObject():
 		o.hide_select = True
 		o.select=False
 	#bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
-	   
+		 
 	o.dimensions=bpy.context.scene.cam_machine.working_area
 	
 	
@@ -2192,7 +2174,7 @@ def useBridges(ch,o):
 
 def getLayers(operation, startdepth, enddepth):
 	'''returns a list of layers bounded by startdepth and enddepth
-	   uses operation.stepdown to determine number of layers.
+		 uses operation.stepdown to determine number of layers.
 	'''
 	if operation.use_layers:
 		layers = []
@@ -2283,8 +2265,6 @@ def strategy_cutout( o ):
 		chunk.setZ(layer[1])
 	
 	chunks=[]
-	
-	
 
 	if o.use_bridges:#add bridges to chunks
 		#bridges=getBridges(p,o)
@@ -2309,27 +2289,26 @@ def strategy_cutout( o ):
 	else:
 		for chl in extendorder:
 			chunks.append(chl[0])
-			
 
-	chunksToMesh(chunks,o)
+	return chunks
 
 def strategy_curve( o ):
 	print('operation: curve')
 	pathSamples=[]
-	getOperationSources(o)
+	#getOperationSources(o)
 	if not o.onlycurves:
 		o.warnings+= 'at least one of assigned objects is not a curve\n'
 	#ob=bpy.data.objects[o.object_name]
 	for ob in o.objects:
 		pathSamples.extend(curveToChunks(ob))
 	pathSamples=sortChunks(pathSamples,o)#sort before sampling
-	pathSamples=chunksRefine(pathSamples,o)
+	pathSamples=chunksTessalate(pathSamples,o.dist_along_paths)
 	
 	if o.ramp:
 		for ch in pathSamples:
 			ch.rampZigZag(ch.zstart, ch.points[0][2],o)
 			
-	chunksToMesh(pathSamples,o)
+	return pathSamples
 	
 def strategy_proj_curve( s, o ):
 	print('operation: projected curve')
@@ -2396,7 +2375,8 @@ def strategy_proj_curve( s, o ):
 	chunks.extend(sampleChunksNAxis(o,pathSamples,layers))
 	#for ch in pathSamples:
 	#	ch.points=ch.endpoints
-	chunksToMesh(chunks,o)
+	
+	return chunks
 
 def strategy_pocket( o ):
 	print('operation: pocket')
@@ -2574,9 +2554,8 @@ def strategy_pocket( o ):
 
 	if o.first_down:
 		chunks = sortChunks(chunks, o)
-
 		
-	chunksToMesh(chunks,o)
+	return chunks
 		
 def strategy_drill( o ):
 	print('operation: Drill')
@@ -2661,7 +2640,32 @@ def strategy_drill( o ):
 					
 	
 	chunklayers = sortChunks( chunklayers, o)
-	chunksToMesh( chunklayers, o)
+	
+	return chunklayers
+
+
+def unique(L):
+	"""Return a list of unhashable elements in s, but without duplicates.
+	[[1, 2], [2, 3], [1, 2]] >>> [[1, 2], [2, 3]]"""
+	#For unhashable objects, you can sort the sequence and then scan from the end of the list, deleting duplicates as you go
+	nDupli=0
+	nZcolinear=0
+	L.sort()#sort() brings the equal elements together; then duplicates are easy to weed out in a single pass.
+	last = L[-1]
+	for i in range(len(L)-2, -1, -1):
+		if last[:2] == L[i][:2]:#XY coordinates compararison
+			if last[2] == L[i][2]:#Z coordinates compararison
+				nDupli+=1#duplicates vertices
+			else:#Z colinear
+				nZcolinear+=1
+			del L[i]
+		else:
+			last = L[i]
+	return (nDupli,nZcolinear)#list data type is mutable, input list will automatically update and doesn't need to be returned
+
+def checkEqual(lst):
+	return lst[1:] == lst[:-1]	
+	
 
 def strategy_medial_axis( o ):
 	print('operation: Medial Axis')	
@@ -2671,9 +2675,10 @@ def strategy_medial_axis( o ):
 	
 	chunks=[]
 	
-	gpoly=spolygon.Polygon()
-	angle=o.cutter_tip_angle
-	slope=math.tan(math.pi*(90-angle/2)/180)
+	angle = o.cutter_tip_angle
+	slope = math.tan(math.pi*(90-angle/2)/180)
+	
+	# calculate maximum cut depth based on the type of cutter used
 	if o.cutter_type=='VCARVE':
 		angle = o.cutter_tip_angle
 		#start the max depth calc from the "start depth" of the operation.
@@ -2686,115 +2691,95 @@ def strategy_medial_axis( o ):
 			#pulling away from the desired cut surface
 			o.cutter_diameter = (maxdepth - o.maxz) / ( - math.tan(math.pi*(90-angle/2)/180) ) * 2
 	elif o.cutter_type=='BALLNOSE' or o.cutter_type=='BALL':
-		#angle = o.cutter_tip_angle
 		maxdepth = o.cutter_diameter/2
 	else:
-		o.warnings+='Only Ballnose, Ball and V-carve cutters\n are supported'
-		return
-	#remember resolutions of curves, to refine them, 
-	#otherwise medial axis computation yields too many branches in curved parts
-	resolutions_before=[]
-	for ob in o.objects:
-		if ob.type == 'CURVE' or ob.type == 'FONT':
-			resolutions_before.append(ob.data.resolution_u)
-			if ob.data.resolution_u < 64:
-				ob.data.resolution_u=64
+		# allow other cutter shapes but give a warning
+		o.warnings += 'This cutter not fully supported, only Ballnose, Ball and V-carve cutters are'
+		maxdepth = o.minz
+			
+	# use user max depth setting if its less than cutter maxdepth
+	if maxdepth < o.minz:
+		maxdepth = o.minz
+		
+	# use skin setting to adjust maxdepth
+	maxdepth += o.skin
+	
 				
-				
-	polys=getOperationSilhouete(o)
-	mpoly = sgeometry.asMultiPolygon(polys)
-	mpoly_boundary = mpoly.boundary
+	polys = getOperationSilhouete(o)
 	for poly in polys:
-		schunks=shapelyToChunks(poly,-1)
-		schunks = chunksRefineThreshold(schunks,o.medial_axis_subdivision, o.medial_axis_threshold)#chunksRefine(schunks,o)
+		poly_boundary = poly.boundary
+		schunks = shapelyToChunks(poly, -1)
+		schunks = chunksTessalate(schunks, o.dist_along_paths)
 		
 		verts=[]
-		for ch in schunks:		
-			for pt in ch.points:
-				#pvoro = Site(pt[0], pt[1])
-				verts.append(pt)#(pt[0], pt[1]), pt[2])
-		#verts= points#[[vert.x, vert.y, vert.z] for vert in vertsPts]
-		nDupli,nZcolinear = unique(verts)
-		nVerts=len(verts)
-		print(str(nDupli)+" duplicates points ignored")
-		print(str(nZcolinear)+" z colinear points excluded")
-		if nVerts < 3:
-			self.report({'ERROR'}, "Not enough points")
-			return {'FINISHED'}
-		#Check colinear
-		xValues=[pt[0] for pt in verts]
-		yValues=[pt[1] for pt in verts]
-		if checkEqual(xValues) or checkEqual(yValues):
-			self.report({'ERROR'}, "Points are colinear")
-			return {'FINISHED'}
-		#Create diagram
+		for ch in schunks:
+			verts += ch.points
+		
+		nVerts = len(verts)
 		print("Tesselation... ("+str(nVerts)+" points)")
-		xbuff, ybuff = 5, 5 # %
-		zPosition=0
-		vertsPts= [Point(vert[0], vert[1], vert[2]) for vert in verts]
-		#vertsPts= [Point(vert[0], vert[1]) for vert in verts]
 		
-		pts, edgesIdx = computeVoronoiDiagram(vertsPts, xbuff, ybuff, polygonsOutput=False, formatOutput=True)
+		pts, edgesIdx = computeVoronoiDiagram(verts, 5, 5, polygonsOutput=False, formatOutput=True)
 		
-		#
-		#pts=[[pt[0], pt[1], zPosition] for pt in pts]
-		newIdx=0
-		vertr=[]
-		filteredPts=[]
-		print('filter points')
+		newIdx = 0
+		vertr = []
+		filteredPts = []
+		print('filtering points...')
 		for p in pts:
-			if not poly.contains(sgeometry.Point(p)):
-				vertr.append((True,-1))
-			else:
-				vertr.append((False,newIdx))
+			if poly.contains(sgeometry.Point(p)):
+				# point is inside the operation silhouete
+				vertr.append((False, newIdx))
 				if o.cutter_type == 'VCARVE':
 					#start the z depth calc from the "start depth" of the operation.
-					z = o.maxz - mpoly.boundary.distance(sgeometry.Point(p))*slope
+					z = o.maxz - poly.boundary.distance(sgeometry.Point(p))*slope
 					if z<maxdepth:
 						z=maxdepth
 				elif o.cutter_type == 'BALL' or o.cutter_type == 'BALLNOSE':
-					d = mpoly_boundary.distance(sgeometry.Point(p))
+					d = poly_boundary.distance(sgeometry.Point(p))
 					r = o.cutter_diameter/2.0
 					if d>=r:
-						z=-r
+						z = -r
 					else:
 						#print(r, d)
-						z = -r+sqrt(r*r - d*d )
+						z = -r + sqrt(r*r - d*d )
 				else:
-					z=0#
+					z = 0
+				# adjust for z starting position other than 0 : user operation depth start
+				z += o.maxz
+				# limit z depth
+				if z<maxdepth:
+					z = maxdepth
 				#print(mpoly.distance(sgeometry.Point(0,0)))
 				#if(z!=0):print(z)
-				filteredPts.append((p[0],p[1],z))
-				newIdx+=1
+				filteredPts.append((p[0], p[1], z))
+				newIdx += 1
+			else:
+				vertr.append((True, -1))
 				
-		print('filter edges')		
-		filteredEdgs=[]
-		ledges=[]
-		for e in edgesIdx:
-			
-			do=True
-			p1=pts[e[0]]
-			p2=pts[e[1]]
-			#print(p1,p2,len(vertr))
+		print('filtering edges...')		
+		#filteredEdgs = []
+		ledges = []
+		for e in edgesIdx:	
+			do = True
 			if vertr[e[0]][0]: # exclude edges with allready excluded points
-				do=False
+				do = False
 			elif vertr[e[1]][0]:
-				do=False
+				do = False
 			if do:
-				filteredEdgs.append(((vertr[e[0]][1],vertr[e[1]][1])))
-				ledges.append(sgeometry.LineString((filteredPts[vertr[e[0]][1]],filteredPts[vertr[e[1]][1]])))
+				#filteredEdgs.append(((vertr[e[0]][1], vertr[e[1]][1])))
+				ledges.append(sgeometry.LineString((filteredPts[vertr[e[0]][1]], filteredPts[vertr[e[1]][1]])))
 				#print(ledges[-1].has_z)
 		
 			
-		bufpoly = poly.buffer(-o.cutter_diameter/2, resolution = 64)
+		bufpoly = poly.buffer(-o.cutter_diameter/2, resolution = 6)
 
 		lines = shapely.ops.linemerge(ledges)
 		#print(lines.type)
 		
 		if bufpoly.type=='Polygon' or bufpoly.type=='MultiPolygon':
-			lines=lines.difference(bufpoly)
-			chunks.extend(shapelyToChunks(bufpoly,maxdepth))
-		chunks.extend( shapelyToChunks(lines,0))
+			lines = lines.difference(bufpoly)
+			chunks.extend(shapelyToChunks(bufpoly, maxdepth))
+			
+		chunks.extend( shapelyToChunks(lines, 0))
 		
 		#segments=[]
 		#processEdges=filteredEdgs.copy()
@@ -2824,11 +2809,6 @@ def strategy_medial_axis( o ):
 		
 		'''
 		#bpy.ops.object.convert(target='CURVE')
-	oi=0
-	for ob in o.objects:
-		if ob.type == 'CURVE' or ob.type == 'FONT':
-			ob.data.resolution_u=resolutions_before[oi]
-			oi+=1
 		
 	#bpy.ops.object.join()
 	chunks = sortChunks(chunks, o )
@@ -2847,348 +2827,340 @@ def strategy_medial_axis( o ):
 	if o.first_down:
 		chunklayers = sortChunks(chunklayers, o)
 
-	chunksToMesh(chunklayers, o )
+	return chunklayers
 
+def strategy_3d_path_carve( o ):
+	print('operation: 3D path carve')	
+
+	if o.strategy=='CARVE':
+		pathSamples=[]
+		#for ob in o.objects:
+		ob=bpy.data.objects[o.curve_object]
+		pathSamples.extend(curveToChunks(ob))
+		pathSamples=sortChunks(pathSamples,o)#sort before sampling
+		pathSamples=chunksTessalate(pathSamples,o.dist_along_paths)
+		
+	elif o.strategy=='PENCIL':
+		prepareArea(o)
+		pathSamples=getOffsetImageCavities(o,o.offset_image)
+		#for ch in pathSamples:
+		#	for i,p in enumerate(ch.points):
+		#	 ch.points[i]=(p[0],p[1],0)
+		pathSamples=limitChunks(pathSamples,o)
+		pathSamples=sortChunks(pathSamples,o)#sort before sampling
+		
+	elif o.strategy=='CRAZY':
+		prepareArea(o)
+		
+		#pathSamples = crazyStrokeImage(o)
+		#####this kind of worked and should work:
+		millarea=o.zbuffer_image<o.minz+0.000001
+		avoidarea = o.offset_image>o.minz+0.000001
+		
+		pathSamples = crazyStrokeImageBinary(o,millarea,avoidarea)
+		#####
+		pathSamples=sortChunks(pathSamples,o)
+		pathSamples=chunksTessalate(pathSamples,o.dist_along_paths)
+		
+	else: 
+		if o.strategy=='OUTLINEFILL':
+			getOperationSilhouete(o)
+		pathSamples=getPathPattern(o)
+		if o.strategy=='OUTLINEFILL':
+			pathSamples = sortChunks(pathSamples,o)#have to be sorted once before, because of the parenting inside of samplechunks
+		#chunksToMesh(pathSamples,o)#for testing pattern script
+		#return
+		if o.strategy in ['PARALLEL', 'BLOCK', 'SPIRAL', 'CIRCLES']:
+			pathSamples=connectChunksLow(pathSamples,o)
+	
+	#print (minz)
+	
+	
+	chunks=[]
+	layers = getLayers(o, o.maxz, o.min.z)		
+	chunks.extend(sampleChunks(o, pathSamples, layers))
+	
+	if (o.strategy=='PENCIL'):# and bpy.app.debug_value==-3:
+		chunks=chunksCoherency(chunks)
+		print('coherency check')
+		
+	if o.strategy in ['PARALLEL', 'CROSS', 'PENCIL', 'OUTLINEFILL']:# 'PARALLEL', and not o.parallel_step_back:
+		print('sorting')
+		chunks=sortChunks(chunks,o)
+		if o.strategy == 'OUTLINEFILL':
+			chunks = connectChunksLow(chunks,o)
+	if o.ramp:
+		for ch in chunks:
+			ch.rampZigZag(ch.zstart, ch.points[0][2],o)
+	#print(chunks)
+	if o.strategy=='CARVE':
+		for ch in chunks:
+			for vi in range(0,len(ch.points)):
+				ch.points[vi]=(ch.points[vi][0],ch.points[vi][1],ch.points[vi][2]-o.carve_depth)
+	if o.use_bridges:
+		for chunk in chunks:
+			useBridges(chunk,o)
+			
+	return chunks
+
+def strategy_waterline_ocl( o ):
+	print('operation: waterline using opencamlib')	
+	chunks = []
+	oclGetWaterline(o, chunks)
+	chunks = limitChunks(chunks, o)
+	if (o.movement_type=='CLIMB' and o.spindle_rotation_direction=='CW') or (o.movement_type=='CONVENTIONAL' and o.spindle_rotation_direction=='CCW'):
+		for ch in chunks:
+			ch.points.reverse()
+	
+	return chunks
+
+def strategy_waterline( o ):
+	print('operation: waterline')	
+	topdown=True
+	tw=time.time()
+	chunks=[]
+	progress ('retrieving object slices')
+	prepareArea(o)
+	layerstep=1000000000
+	if o.use_layers:
+		layerstep=math.floor(o.stepdown/o.slice_detail)
+		if layerstep==0:
+			layerstep=1
+			
+	#for projection of filled areas	 
+	layerstart=0#
+	layerend=o.min.z#
+	layers=[[layerstart,layerend]]
+	#######################	 
+	nslices=ceil(abs(o.minz/o.slice_detail))
+	lastislice=numpy.array([])
+	lastslice=spolygon.Polygon()#polyversion
+	layerstepinc=0
+	
+	slicesfilled=0
+	#polyToMesh(o.ambient,0)
+	for h in range(0,nslices):
+		layerstepinc+=1
+		slicechunks=[]
+		z=o.minz+h*o.slice_detail
+		if h==0:
+			z+=0.0000001# if people do mill flat areas, this helps to reach those... otherwise first layer would actually be one slicelevel above min z.
+		#print(z)
+		#sliceimage=o.offset_image>z
+		islice=o.offset_image>z
+		slicepolys=imageToShapely(o,islice,with_border=True)
+		#for pviz in slicepolys:
+		#	polyToMesh('slice',pviz,z)
+		poly=spolygon.Polygon()#polygversion
+		lastchunks=[]
+		#imagechunks=imageToChunks(o,islice)
+		#for ch in imagechunks:
+		#	slicechunks.append(camPathChunk([]))
+		#	for s in ch.points:
+		#	 slicechunks[-1].points.append((s[0],s[1],z))
+				
+		
+		#print('found polys',layerstepinc,len(slicepolys))
+		for p in slicepolys:
+			#print('polypoints',p.nPoints(0))
+			poly=poly.union(p)#polygversion TODO: why is this added?
+			#print()
+			#polyToMesh(p,z)
+			nchunks=shapelyToChunks(p,z)
+			nchunks=limitChunks(nchunks,o, force=True)
+			#print('chunksnum',len(nchunks))
+			#if len(nchunks)>0:
+			#	print('chunkpoints',len(nchunks[0].points))
+			#print()
+			lastchunks.extend(nchunks)
+			slicechunks.extend(nchunks)
+			#print('totchunks',len(slicechunks))
+		if len(slicepolys)>0:
+			slicesfilled+=1
+			#chunks.extend(polyToChunks(slicepolys[1],z))
+			#print(len(p),'slicelen')
+		
+		
+		#
+		#print(len(lastslice))
+		#'''
+		if o.waterline_fill:
+			layerstart=min(o.maxz,z+o.slice_detail)#
+			layerend=max(o.min.z,z-o.slice_detail)#
+			layers=[[layerstart,layerend]]
+			#####################################
+			#fill top slice for normal and first for inverse, fill between polys
+			if not lastslice.is_empty or (o.inverse and not poly.is_empty and slicesfilled==1):
+				#offs=False
+				if not lastslice.is_empty:#between polys
+					if o.inverse:
+						restpoly=poly.difference(lastslice)
+					else:
+						restpoly=lastslice.difference(poly)
+					#print('filling between')
+				if (not o.inverse and poly.is_empty and slicesfilled>0) or (o.inverse and not poly.is_empty and slicesfilled==1):#first slice fill
+					restpoly=lastslice
+					#print('filling first')
+				
+				#print(len(restpoly))
+				#polyToMesh('fillrest',restpoly,z)
+					
+				restpoly=restpoly.buffer(-o.dist_between_paths, resolution = o.circle_detail)
+				
+				fillz = z 
+				i=0
+				while not restpoly.is_empty:
+					nchunks=shapelyToChunks(restpoly,fillz)
+					#project paths TODO: path projection during waterline is not working
+					if o.waterline_project:
+						nchunks=chunksTessalate(nchunks,o.dist_along_paths)
+						nchunks=sampleChunks(o,nchunks,layers)
+						
+					nchunks=limitChunks(nchunks,o, force=True)
+					#########################
+					slicechunks.extend(nchunks)
+					parentChildDist(lastchunks,nchunks,o)
+					lastchunks=nchunks
+					#slicechunks.extend(polyToChunks(restpoly,z))
+					restpoly=restpoly.buffer(-o.dist_between_paths, resolution = o.circle_detail)
+					
+					i+=1
+					#print(i)
+			i=0
+			#'''
+			#####################################
+			# fill layers and last slice, last slice with inverse is not working yet - inverse millings end now always on 0 so filling ambient does have no sense.
+			if (slicesfilled>0 and layerstepinc==layerstep) or (not o.inverse and not poly.is_empty and slicesfilled==1) or (o.inverse and poly.is_empty and slicesfilled>0):
+				fillz=z
+				layerstepinc=0
+				
+				#ilim=1000#TODO:this should be replaced... no limit, just check if the shape grows over limits.
+				
+				#offs=False
+				boundrect=o.ambient
+				restpoly=boundrect.difference(poly)
+				if (o.inverse and poly.is_empty and slicesfilled>0):
+					restpoly=boundrect.difference(lastslice)
+				
+				restpoly=restpoly.buffer(-o.dist_between_paths, resolution = o.circle_detail)
+				
+				i=0
+				while not restpoly.is_empty: #'GeometryCollection':#len(restpoly.boundary.coords)>0:
+					#print(i)
+					nchunks=shapelyToChunks(restpoly,fillz)
+					#########################
+					nchunks=limitChunks(nchunks,o, force=True)
+					slicechunks.extend(nchunks)
+					parentChildDist(lastchunks,nchunks,o)
+					lastchunks=nchunks
+					#slicechunks.extend(polyToChunks(restpoly,z))
+					restpoly=restpoly.buffer(-o.dist_between_paths, resolution = o.circle_detail)
+					i+=1
+			
+			
+			#'''
+			percent=int(h/nslices*100)
+			progress('waterline layers ',percent)  
+			lastslice=poly
+			
+		#print(poly)
+		#print(len(lastslice))
+		'''
+		if len(lastislice)>0:
+			i=numpy.logical_xor(lastislice , islice)
+			
+			n=0
+			while i.sum()>0 and n<10000:
+				i=outlineImageBinary(o,o.dist_between_paths,i,False)
+				polys=imageToShapely(o,i)
+				for poly in polys:
+					chunks.extend(polyToChunks(poly,z))
+				n+=1
+		
+	
+				#restpoly=outlinePoly(restpoly,o.dist_between_paths,oo.circle_detail,o.optimize,o.optimize_threshold,,False)
+				#chunks.extend(polyToChunks(restpoly,z))
+				
+		lastislice=islice
+		'''
+		
+		
+		#if bpy.app.debug_value==1:
+		if (o.movement_type=='CONVENTIONAL' and o.spindle_rotation_direction=='CCW') or (o.movement_type=='CLIMB' and o.spindle_rotation_direction=='CW'):
+			for chunk in slicechunks:
+				chunk.points.reverse()
+		slicechunks=sortChunks(slicechunks,o)
+		if topdown:
+			slicechunks.reverse()
+		#project chunks in between
+		
+		chunks.extend(slicechunks)
+		
+	#chunks=sortChunks(chunks,o)
+	if topdown:
+		chunks.reverse()
+		'''
+		chi=0
+		if len(chunks)>2:
+			while chi<len(chunks)-2:
+				d=dist2d((chunks[chi][-1][0],chunks[chi][-1][1]),(chunks[chi+1][0][0],chunks[chi+1][0][1]))
+				if chunks[chi][0][2]>=chunks[chi+1][0][2] and d<o.dist_between_paths*2:
+					chunks[chi].extend(chunks[chi+1])
+					chunks.remove(chunks[chi+1])
+					chi=chi-1
+				chi+=1
+		'''
+	printTimeElapsed(tw)
+	return chunks
 	
 #this is the main function.
 #FIXME: split strategies into separate file!
 def getPath3axis(context, operation):
 	s=bpy.context.scene
 	o=operation
+	progressUpdate()
 	getBounds(o)
-	
+	getAmbient(o)
+	chunks = []
 	
 	if o.strategy=='CUTOUT':
-		strategy_cutout( o )
+		chunks = strategy_cutout(o)
 		
 	elif o.strategy=='CURVE':
-		strategy_curve( o )
+		chunks = strategy_curve(o)
 				
 	elif o.strategy=='PROJECTED_CURVE':
-		strategy_proj_curve(s, o)
+		chunks = strategy_proj_curve(s, o)
 		
 	elif o.strategy=='POCKET':
-		strategy_pocket( o )
+		chunks = strategy_pocket(o)
 	
 		
 	elif o.strategy in ['PARALLEL', 'CROSS', 'BLOCK', 'SPIRAL', 'CIRCLES', 'OUTLINEFILL', 'CARVE', 'PENCIL', 'CRAZY']:
-		
-		if o.strategy=='CARVE':
-			pathSamples=[]
-			#for ob in o.objects:
-			ob=bpy.data.objects[o.curve_object]
-			pathSamples.extend(curveToChunks(ob))
-			pathSamples=sortChunks(pathSamples,o)#sort before sampling
-			pathSamples=chunksRefine(pathSamples,o)
-		elif o.strategy=='PENCIL':
-			prepareArea(o)
-			getAmbient(o)
-			pathSamples=getOffsetImageCavities(o,o.offset_image)
-			#for ch in pathSamples:
-			#	for i,p in enumerate(ch.points):
-			#	 ch.points[i]=(p[0],p[1],0)
-			pathSamples=limitChunks(pathSamples,o)
-			pathSamples=sortChunks(pathSamples,o)#sort before sampling
-		elif o.strategy=='CRAZY':
-			prepareArea(o)
-			
-			#pathSamples = crazyStrokeImage(o)
-			#####this kind of worked and should work:
-			millarea=o.zbuffer_image<o.minz+0.000001
-			avoidarea = o.offset_image>o.minz+0.000001
-			
-			pathSamples = crazyStrokeImageBinary(o,millarea,avoidarea)
-			#####
-			pathSamples=sortChunks(pathSamples,o)
-			pathSamples=chunksRefine(pathSamples,o)
-			
-		else: 
-			if o.strategy=='OUTLINEFILL':
-				getOperationSilhouete(o)
-			pathSamples=getPathPattern(o)
-			if o.strategy=='OUTLINEFILL':
-				pathSamples = sortChunks(pathSamples,o)#have to be sorted once before, because of the parenting inside of samplechunks
-			#chunksToMesh(pathSamples,o)#for testing pattern script
-			#return
-			if o.strategy in ['BLOCK', 'SPIRAL', 'CIRCLES']:
-				pathSamples=connectChunksLow(pathSamples,o)
-		
-		#print (minz)
-		
-		
-		chunks=[]
-		layers = getLayers(o, o.maxz, o.min.z)		
-		
-		chunks.extend(sampleChunks(o,pathSamples,layers))
-		if (o.strategy=='PENCIL'):# and bpy.app.debug_value==-3:
-			chunks=chunksCoherency(chunks)
-			print('coherency check')
-			
-		if o.strategy in ['PARALLEL', 'CROSS', 'PENCIL', 'OUTLINEFILL']:# and not o.parallel_step_back:
-			print('sorting')
-			chunks=sortChunks(chunks,o)
-			if o.strategy == 'OUTLINEFILL':
-				chunks = connectChunksLow(chunks,o)
-		if o.ramp:
-			for ch in chunks:
-				ch.rampZigZag(ch.zstart, ch.points[0][2],o)
-		#print(chunks)
-		if o.strategy=='CARVE':
-			for ch in chunks:
-				for vi in range(0,len(ch.points)):
-					ch.points[vi]=(ch.points[vi][0],ch.points[vi][1],ch.points[vi][2]-o.carve_depth)
-		if o.use_bridges:
-			for chunk in chunks:
-				useBridges(chunk,o)
-		chunksToMesh(chunks,o)
+		chunks = strategy_3d_path_carve(o)
 		
 		
 	elif o.strategy=='WATERLINE' and o.use_opencamlib:
-		getAmbient(o)
-		chunks=[]
-		oclGetWaterline(o, chunks)
-		chunks=limitChunks(chunks,o)
-		if (o.movement_type=='CLIMB' and o.spindle_rotation_direction=='CW') or (o.movement_type=='CONVENTIONAL' and o.spindle_rotation_direction=='CCW'):
-			for ch in chunks:
-				ch.points.reverse()
-		chunksToMesh(chunks,o)
+		chunks = strategy_waterline_ocl(o)
 		
 		
 	elif o.strategy=='WATERLINE' and not o.use_opencamlib:
-		topdown=True
-		tw=time.time()
-		chunks=[]
-		progress ('retrieving object slices')
-		prepareArea(o)
-		layerstep=1000000000
-		if o.use_layers:
-			layerstep=math.floor(o.stepdown/o.slice_detail)
-			if layerstep==0:
-				layerstep=1
-				
-		#for projection of filled areas	 
-		layerstart=0#
-		layerend=o.min.z#
-		layers=[[layerstart,layerend]]
-		#######################	 
-		nslices=ceil(abs(o.minz/o.slice_detail))
-		lastislice=numpy.array([])
-		lastslice=spolygon.Polygon()#polyversion
-		layerstepinc=0
-		
-		slicesfilled=0
-		getAmbient(o)
-		#polyToMesh(o.ambient,0)
-		for h in range(0,nslices):
-			layerstepinc+=1
-			slicechunks=[]
-			z=o.minz+h*o.slice_detail
-			if h==0:
-				z+=0.0000001# if people do mill flat areas, this helps to reach those... otherwise first layer would actually be one slicelevel above min z.
-			#print(z)
-			#sliceimage=o.offset_image>z
-			islice=o.offset_image>z
-			slicepolys=imageToShapely(o,islice,with_border=True)
-			#for pviz in slicepolys:
-			#	polyToMesh('slice',pviz,z)
-			poly=spolygon.Polygon()#polygversion
-			lastchunks=[]
-			#imagechunks=imageToChunks(o,islice)
-			#for ch in imagechunks:
-			#	slicechunks.append(camPathChunk([]))
-			#	for s in ch.points:
-			#	 slicechunks[-1].points.append((s[0],s[1],z))
-					
-			
-			#print('found polys',layerstepinc,len(slicepolys))
-			for p in slicepolys:
-				#print('polypoints',p.nPoints(0))
-				poly=poly.union(p)#polygversion TODO: why is this added?
-				#print()
-				#polyToMesh(p,z)
-				nchunks=shapelyToChunks(p,z)
-				nchunks=limitChunks(nchunks,o, force=True)
-				#print('chunksnum',len(nchunks))
-				#if len(nchunks)>0:
-				#	print('chunkpoints',len(nchunks[0].points))
-				#print()
-				lastchunks.extend(nchunks)
-				slicechunks.extend(nchunks)
-				#print('totchunks',len(slicechunks))
-			if len(slicepolys)>0:
-				slicesfilled+=1
-				#chunks.extend(polyToChunks(slicepolys[1],z))
-				#print(len(p),'slicelen')
-			
-			
-			#
-			#print(len(lastslice))
-			#'''
-			if o.waterline_fill:
-				layerstart=min(o.maxz,z+o.slice_detail)#
-				layerend=max(o.min.z,z-o.slice_detail)#
-				layers=[[layerstart,layerend]]
-				#####################################
-				#fill top slice for normal and first for inverse, fill between polys
-				if not lastslice.is_empty or (o.inverse and not poly.is_empty and slicesfilled==1):
-					#offs=False
-					if not lastslice.is_empty:#between polys
-						if o.inverse:
-							restpoly=poly.difference(lastslice)
-						else:
-							restpoly=lastslice.difference(poly)
-						#print('filling between')
-					if (not o.inverse and poly.is_empty and slicesfilled>0) or (o.inverse and not poly.is_empty and slicesfilled==1):#first slice fill
-						restpoly=lastslice
-						#print('filling first')
-					
-					#print(len(restpoly))
-					#polyToMesh('fillrest',restpoly,z)
-						
-					restpoly=restpoly.buffer(-o.dist_between_paths, resolution = o.circle_detail)
-					
-					fillz = z 
-					i=0
-					while not restpoly.is_empty:
-						nchunks=shapelyToChunks(restpoly,fillz)
-						#project paths TODO: path projection during waterline is not working
-						if o.waterline_project:
-							nchunks=chunksRefine(nchunks,o)
-							nchunks=sampleChunks(o,nchunks,layers)
-							
-						nchunks=limitChunks(nchunks,o, force=True)
-						#########################
-						slicechunks.extend(nchunks)
-						parentChildDist(lastchunks,nchunks,o)
-						lastchunks=nchunks
-						#slicechunks.extend(polyToChunks(restpoly,z))
-						restpoly=restpoly.buffer(-o.dist_between_paths, resolution = o.circle_detail)
-						
-						i+=1
-						#print(i)
-				i=0
-				#'''
-				#####################################
-				# fill layers and last slice, last slice with inverse is not working yet - inverse millings end now always on 0 so filling ambient does have no sense.
-				if (slicesfilled>0 and layerstepinc==layerstep) or (not o.inverse and not poly.is_empty and slicesfilled==1) or (o.inverse and poly.is_empty and slicesfilled>0):
-					fillz=z
-					layerstepinc=0
-					
-					#ilim=1000#TODO:this should be replaced... no limit, just check if the shape grows over limits.
-					
-					#offs=False
-					boundrect=o.ambient
-					restpoly=boundrect.difference(poly)
-					if (o.inverse and poly.is_empty and slicesfilled>0):
-						restpoly=boundrect.difference(lastslice)
-					
-					restpoly=restpoly.buffer(-o.dist_between_paths, resolution = o.circle_detail)
-					
-					i=0
-					while not restpoly.is_empty: #'GeometryCollection':#len(restpoly.boundary.coords)>0:
-						#print(i)
-						nchunks=shapelyToChunks(restpoly,fillz)
-						#########################
-						nchunks=limitChunks(nchunks,o, force=True)
-						slicechunks.extend(nchunks)
-						parentChildDist(lastchunks,nchunks,o)
-						lastchunks=nchunks
-						#slicechunks.extend(polyToChunks(restpoly,z))
-						restpoly=restpoly.buffer(-o.dist_between_paths, resolution = o.circle_detail)
-						i+=1
-				
-				
-				#'''
-				percent=int(h/nslices*100)
-				progress('waterline layers ',percent)  
-				lastslice=poly
-				
-			#print(poly)
-			#print(len(lastslice))
-			'''
-			if len(lastislice)>0:
-				i=numpy.logical_xor(lastislice , islice)
-				
-				n=0
-				while i.sum()>0 and n<10000:
-					i=outlineImageBinary(o,o.dist_between_paths,i,False)
-					polys=imageToShapely(o,i)
-					for poly in polys:
-						chunks.extend(polyToChunks(poly,z))
-					n+=1
-			
-		
-					#restpoly=outlinePoly(restpoly,o.dist_between_paths,oo.circle_detail,o.optimize,o.optimize_threshold,,False)
-					#chunks.extend(polyToChunks(restpoly,z))
-					
-			lastislice=islice
-			'''
-			
-			
-			#if bpy.app.debug_value==1:
-			if (o.movement_type=='CONVENTIONAL' and o.spindle_rotation_direction=='CCW') or (o.movement_type=='CLIMB' and o.		spindle_rotation_direction=='CW'):
-				for chunk in slicechunks:
-					chunk.points.reverse()
-			slicechunks=sortChunks(slicechunks,o)
-			if topdown:
-				slicechunks.reverse()
-			#project chunks in between
-			
-			chunks.extend(slicechunks)
-		#chunks=sortChunks(chunks,o)
-		if topdown:
-			chunks.reverse()
-			'''
-			chi=0
-			if len(chunks)>2:
-				while chi<len(chunks)-2:
-					d=dist2d((chunks[chi][-1][0],chunks[chi][-1][1]),(chunks[chi+1][0][0],chunks[chi+1][0][1]))
-					if chunks[chi][0][2]>=chunks[chi+1][0][2] and d<o.dist_between_paths*2:
-						chunks[chi].extend(chunks[chi+1])
-						chunks.remove(chunks[chi+1])
-						chi=chi-1
-					chi+=1
-			'''
-		print(time.time()-tw)
-		chunksToMesh(chunks,o)	
+		chunks = strategy_waterline(o)
 		
 	elif o.strategy=='DRILL':
-		strategy_drill( o )
+		chunks = strategy_drill( o )
 			
 	elif o.strategy=='MEDIAL_AXIS':
-		strategy_medial_axis( o )
+		chunks = strategy_medial_axis( o )
+
+	chunksToMesh(chunks, o)
+	
 		
 	#progress('finished')
 	
-#tools for voroni graphs all copied from the delaunayVoronoi addon:
-class Point:
-	def __init__(self, x, y, z):
-		self.x, self.y, self.z= x, y, z
 
-def unique(L):
-	"""Return a list of unhashable elements in s, but without duplicates.
-	[[1, 2], [2, 3], [1, 2]] >>> [[1, 2], [2, 3]]"""
-	#For unhashable objects, you can sort the sequence and then scan from the end of the list, deleting duplicates as you go
-	nDupli=0
-	nZcolinear=0
-	L.sort()#sort() brings the equal elements together; then duplicates are easy to weed out in a single pass.
-	last = L[-1]
-	for i in range(len(L)-2, -1, -1):
-		if last[:2] == L[i][:2]:#XY coordinates compararison
-			if last[2] == L[i][2]:#Z coordinates compararison
-				nDupli+=1#duplicates vertices
-			else:#Z colinear
-				nZcolinear+=1
-			del L[i]
-		else:
-			last = L[i]
-	return (nDupli,nZcolinear)#list data type is mutable, input list will automatically update and doesn't need to be returned
-
-def checkEqual(lst):
-	return lst[1:] == lst[:-1]	
-	
 def getPath4axis(context,operation):
-	t=time.clock()
+	t=time.time()
 	s=bpy.context.scene
 	o=operation
 	getBounds(o)
@@ -3326,7 +3298,7 @@ def rotTo2axes(e,axescombination):
 	return(angle1,angle2)
 	
 def getPath(context,operation):#should do all path calculations.
-	t=time.clock()
+	t=time.time()
 	#print('ahoj0')
 	if shapely.speedups.available:
 		shapely.speedups.enable()
@@ -3351,7 +3323,8 @@ def getPath(context,operation):#should do all path calculations.
 	checkMemoryLimit(operation)
 	
 	
-
+	progressBegin()
+	progressUpdate()
 	if operation.machine_axes=='3':
 		getPath3axis(context,operation)
 	
@@ -3365,6 +3338,7 @@ def getPath(context,operation):#should do all path calculations.
 	elif operation.machine_axes=='4':
 		getPath4axis(context,operation)
 	
+	progressUpdate()
 	
 	#export gcode if automatic.
 	if operation.auto_export:
@@ -3373,9 +3347,10 @@ def getPath(context,operation):#should do all path calculations.
 		p=bpy.data.objects[operation.path_object_name]
 		exportGcodePath(operation.filename,[p.data],[operation])
 
+	progressEnd()
+
 	operation.changed=False
-	t1=time.clock()-t 
-	progress('total time',t1)
+	printTimeElapsed(t) 
 
 def reload_paths(o):
 	oname = "cam_path_"+o.name
