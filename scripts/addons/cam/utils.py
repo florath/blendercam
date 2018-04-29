@@ -21,6 +21,10 @@
 
 #here is the main functionality of Blender CAM. The functions here are called with operators defined in ops.py. All other libraries are called mostly from here.
 
+from __future__ import print_function
+
+import logging
+
 import bpy
 import time
 import mathutils
@@ -63,6 +67,9 @@ from shapely import affinity, prepared
 #from shapely.geometry import * not possible until Polygon libs gets out finally..
 SHAPELY=True
 progressCount = 0
+
+logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s',
+                    level=logging.DEBUG)
 
 def progressUpdate():
     global progressCount
@@ -1649,44 +1656,63 @@ def getOperationSilhouete(operation):
     '''gets silhouete for the operation
         uses image thresholding for everything except curves.
     '''
+    logging.debug("TRACE getOperationSilhouete operation [%s]", operation)
     if operation.update_silhouete_tag:
-        image=None
-        objects=None
-        if operation.geometry_source=='OBJECT' or operation.geometry_source=='GROUP':
-            if operation.onlycurves==False:
-                stype='OBJECTS'
+        logging.debug("TRACE getOperationSilhouete update_silhouete_tag")
+
+        if operation.geometry_source == 'OBJECT' \
+           or operation.geometry_source == 'GROUP':
+            if operation.onlycurves is False:
+                stype = 'OBJECTS'
             else:
-                stype='CURVES'
+                stype = 'CURVES'
         else:
-            stype='IMAGE'
-            
-        totfaces=0
-        if stype=='OBJECTS':
-            for ob in operation.objects:
-                if ob.type=='MESH':
-                    totfaces+=len(ob.data.polygons)
-            
-        
-            
-        if (stype == 'OBJECTS' and totfaces>200000) or stype=='IMAGE' or (operation.use_modifiers and stype !='CURVES'):
-            print('image method')
+            stype = 'IMAGE'
+        logging.debug("TRACE getOperationSilhouete stype [%s]", stype)
+
+        totfaces = 0
+        if stype == 'OBJECTS':
+            for obj in operation.objects:
+                if obj.type == 'MESH':
+                    totfaces += len(obj.data.polygons)
+            logging.debug("TRACE getOperationSilhouete total faces [%d]",
+                          totfaces)
+
+        logging.debug("TRACE getOperationSilhouete use_modifiers [%s]",
+                      operation.use_modifiers)
+        if (stype == 'OBJECTS' and totfaces > 200000) \
+           or stype == 'IMAGE' \
+           or (operation.use_modifiers and stype != 'CURVES'):
+            logging.debug("TRACE getOperationSilhouete using image method "
+                          "for retrieving silhouette")
             samples = renderSampleImage(operation)
-            if stype=='OBJECTS':
-                i = samples > operation.minz-0.0000001#numpy.min(operation.zbuffer_image)-0.0000001##the small number solves issue with totally flat meshes, which people tend to mill instead of proper pockets. then the minimum was also maximum, and it didn't detect contour.
+            logging.debug("TRACE getOperationSilhouete samples finished")
+            if stype == 'OBJECTS':
+                i = samples > operation.minz - 0.0000001
+                # numpy.min(operation.zbuffer_image) -0.0000001
+                # the small number solves issue with totally flat meshes,
+                # which people tend to mill instead of proper pockets.
+                # Then the minimum was also maximum, and it didn't
+                # detect contour.
             else:
-                i = samples > numpy.min(operation.zbuffer_image)#this fixes another numeric imprecision.
-                
-            chunks= imageToChunks(operation,i)
-            operation.silhouete=chunksToShapely(chunks)
-            #print(operation.silhouete)
-            #this conversion happens because we need the silh to be oriented, for milling directions.
+                # This fixes another numeric imprecision.
+                i = samples > numpy.min(operation.zbuffer_image)
+
+            chunks = imageToChunks(operation, i)
+            logging.debug("TRACE getOperationSilhouete chunks [%s]", chunks)
+            operation.silhouete = chunksToShapely(chunks)
+            logging.debug("TRACE getOperationSilhouete silhouete [%s]",
+                          operation.silhouete)
+            # this conversion happens because we need the silh to be oriented,
+            # for milling directions.
         else:
-            print('object method for retrieving silhouette')#
+            logging.debug("TRACE getOperationSilhouete using object method "
+                          "for retrieving silhouette")
             operation.silhouete=getObjectSilhouete(stype, objects = operation.objects)
                 
         operation.update_silhouete_tag=False
     return operation.silhouete
-        
+
 def getObjectSilhouete(stype, objects=None, use_modifiers = False):
     #o=operation
     if stype=='CURVES':#curve conversion to polygon format
@@ -1795,31 +1821,37 @@ def getAmbient(o):
             o.ambient = o.ambient.intersection(o.limit_poly)
         
         o.update_ambient_tag = False
-    
-def getObjectOutline(radius,o,Offset):#FIXME: make this one operation independent
-#circle detail, optimize, optimize thresold.
-    
-    polygons=getOperationSilhouete(o)
-    
-    #print('offseting polygons')
-        
-    if Offset:
-        offset=1
-    else:
-        offset=-1
-        
-    outlines=[]
-    #print(polygons, polygons.type)
-    for p1 in polygons:#sort by size before this???
-        #print(p1.type,len(polygons))
-        if radius>0:
-            p1 = p1.buffer(radius*offset,resolution = o.circle_detail)
+
+def getObjectOutline(radius, o, offset_flag):
+    # FIXME: make this one operation independent
+    # circle detail, optimize, optimize thresold.
+    logging.debug("TRACE getObjectOutline radius [%f] offset [%s]",
+                  radius, offset_flag)
+    polygons = getOperationSilhouete(o)
+
+    for poly in polygons:
+        logging.debug("TRACE getObjectOutline poly [%s]", poly)
+
+    logging.debug("TRACE getObjectOutline offsetting polygons")
+    offset = 1 if offset_flag else -1
+
+    outlines = []
+    # sort by size before this???
+    for poly in polygons:
+        logging.debug("TRACE getObjectOutline polygon type [%s] len [%d]",
+                      poly.type, len(polygons))
+        if radius > 0:
+            logging.debug("TRACE getObjectOutline radius [%f] offset [%s] "
+                          "resolution [%s]", radius, offset, o.circle_detail)
+            poly = poly.buffer(radius * offset, resolution=o.circle_detail)
+            logging.debug("TRACE getObjectOutline converted poly [%s]", poly)
         # if radius * offset is a large negative then could end up with a polygon inside out
         # only add valid polygons
-        if p1.is_valid:
-            outlines.append(p1)
+        if poly.is_valid:
+            logging.debug("TRACE getObjectOutline poly is valid [%s]", poly)
+            outlines.append(poly)
     
-    #print(outlines)
+    print(outlines)
     if o.dont_merge:
         outline=sgeometry.MultiPolygon(outlines)
         #for ci in range(0,len(p)):
@@ -2190,11 +2222,13 @@ def getLayers(operation, startdepth, enddepth):
     
     return layers
     
-###########cutout strategy is completely here:
-def strategy_cutout( o ):
+
+def strategy_cutout(operation):
+    """Complete cutout strategy"""
+    o = operation
     #ob=bpy.context.active_object
-    print('operation: cutout')
-    offset=True
+    logging.debug("TRACE strategy_cutout type [%s] update_zbufferimage_tag [%s]"
+                  % (operation.cut_type, operation.update_zbufferimage_tag))
     if o.cut_type=='ONLINE' and o.onlycurves==True:#is separate to allow open curves :)
         print('separate')
         chunksFromCurve=[]
@@ -2202,31 +2236,26 @@ def strategy_cutout( o ):
             chunksFromCurve.extend(curveToChunks(ob, o.use_modifiers))
         for ch in chunksFromCurve:
             #print(ch.points)
-            
             if len(ch.points)>2:
                 ch.poly=chunkToShapely(ch)
                 #p.addContour(ch.poly)
     else:
         chunksFromCurve=[]
         if o.cut_type=='ONLINE':
-            p=getObjectOutline(0,o,True)
-            
+            p = getObjectOutline(0,o,True)
         else:
-            offset=True
-            if o.cut_type=='INSIDE':
-                offset=False
-                
-            p=getObjectOutline(o.cutter_diameter/2,o,offset)
-            if o.outlines_count>1:
-                for i in range(1,o.outlines_count):
+            # use_offset = False if o.cut_type == 'INSIDE' else True
+            use_offset = False if o.cut_type == 'ONLINE' else True
+            p = getObjectOutline(o.cutter_diameter/2, o, use_offset)
+            print("Outlines Count [%d]" % o.outlines_count)
+            if o.outlines_count > 1:
+                for i in range(1, o.outlines_count):
                     chunksFromCurve.extend(shapelyToChunks(p,-1))
-                    p = p.buffer(distance = o.dist_between_paths * offset, resolution = o.circle_detail)
-            
-                
+                    p = p.buffer(distance = o.dist_between_paths * use_offset, resolution = o.circle_detail)
         chunksFromCurve.extend(shapelyToChunks(p,-1))
         if o.outlines_count>1 and o.movement_insideout=='OUTSIDEIN':
             chunksFromCurve.reverse()
-            
+
     #parentChildPoly(chunksFromCurve,chunksFromCurve,o)
     chunksFromCurve=limitChunks(chunksFromCurve,o)
     if not o.dont_merge:
@@ -3113,9 +3142,14 @@ def strategy_waterline( o ):
     printTimeElapsed(tw)
     return chunks
     
-#this is the main function.
-#FIXME: split strategies into separate file!
 def getPath3axis(context, operation):
+    """This is the main function.
+
+    FIXME: split strategies into separate file!
+    """
+    logging.debug("TRACE getPath3axis strategy [%s] "
+                  "update_zbufferimage_tag [%s]",
+                  operation.strategy, operation.update_zbufferimage_tag)
     s=bpy.context.scene
     o=operation
     progressUpdate()
@@ -3297,7 +3331,11 @@ def rotTo2axes(e,axescombination):
     '''
     return(angle1,angle2)
     
-def getPath(context,operation):#should do all path calculations.
+def getPath(context, operation):
+    """should do all path calculations."""
+    logging.debug("TRACE getPath operation [%s] "
+                  "update_zbufferimage_tag [%s]",
+                  operation, operation.update_zbufferimage_tag)
     t=time.time()
     #print('ahoj0')
     if shapely.speedups.available:

@@ -60,6 +60,14 @@ class camPathChunk:
         self.length=0;#this is total length of this chunk.
         self.zstart=0# this is stored for ramps mainly, because they are added afterwards, but have to use layer info
         self.zend=0#
+
+    def __repr__(self):
+        return "CamPathChunk poly [%s] points [%s] startpoints [%s] " \
+                "endpoints [%s] rotations [%s] sorted [%s] " \
+                "length [%d] zstart [%d] zend [%d]" \
+                % (self.poly, self.points, self.startpoints, self.endpoints,
+                   self.rotations, self.sorted, self.length, self.zstart,
+                   self.zend)
     
     def copy(self):
         nchunk=camPathChunk([])

@@ -19,7 +19,9 @@
 #
 # ***** END GPL LICENCE BLOCK *****
 
-import bpy, bgl,blf 
+import logging
+
+import bpy, bgl,blf
 import mathutils
 import math, time
 from mathutils import *
@@ -52,10 +54,8 @@ bl_info = {
     "wiki_url": "blendercam.blogspot.com",
     "tracker_url": "",
     "category": "Scene"}
-  
-  
-PRECISION=5
 
+PRECISION=5
 
 was_hidden_dict = {}
 
@@ -262,6 +262,7 @@ def operationValid(self,context):
 
         o.use_exact=False
     o.update_offsetimage_tag=True
+    logging.debug("TRACE operationValid set update_zbufferimage_tag to True")
     o.update_zbufferimage_tag=True
     print('validity ')
     #print(o.valid)
@@ -303,6 +304,7 @@ def updateZbufferImage(self,context):
     #print('updatezbuf')
     #print(self,context)
     self.changed=True
+    logging.debug("TRACE updateZbufferImage set update_zbufferimage_tag to True")
     self.update_zbufferimage_tag=True
     self.update_offsetimage_tag=True
     utils.getOperationSources(self)
@@ -327,6 +329,7 @@ def updateCutout(o,context):
 def updateExact(o,context):
     print('update exact ')
     o.changed=True
+    logging.debug("TRACE updateExact set update_zbufferimage_tag to True")
     o.update_zbufferimage_tag=True
     o.update_offsetimage_tag=True
     if o.use_exact and (o.strategy=='WATERLINE' or o.strategy=='POCKET' or o.inverse):
@@ -409,8 +412,10 @@ def getMaxCutdepth(self):
     return self.max_cutdepthValue
         
 class camOperation(bpy.types.PropertyGroup):
-    
-    name = StringProperty(name="Operation Name", description="A unique name for the operation",  default="Operation", update = updateRest)
+
+    name = StringProperty(name="Operation Name",
+                          description="A unique name for the operation",
+                          default="Operation", update=updateRest)
     filename = StringProperty(name="File name", description="a unique file name to be used for the exported g-code", default="Operation", update = updateRest)
     auto_export = BoolProperty(name="Auto export",description="export g-code files immediately after path calculation", default=True)
     hide_all_others = bpy.props.BoolProperty(
@@ -423,9 +428,11 @@ class camOperation(bpy.types.PropertyGroup):
     curve_object = StringProperty(name='Curve source', description='curve which will be sampled along the 3d object', update=operationValid)
     curve_object1 = StringProperty(name='Curve target', description='curve which will serve as attractor for the cutter when the cutter follows the curve', update=operationValid)
     source_image_name = StringProperty(name='image_source', description='image source', update=operationValid)
-    geometry_source = EnumProperty(name='Source of data',
-        items=(
-            ('OBJECT','object', 'mesh, curve, text'),('GROUP','Group of objects', 'objects that have been that have been put in a Group'),('IMAGE','Image', 'an image that has been loaded')),
+    geometry_source = bpy.props.EnumProperty(name='Source of data',
+        items=(('OBJECT','object', 'mesh, curve, text'),
+               ('GROUP','Group of objects',
+                'objects that have been that have been put in a Group'),
+               ('IMAGE','Image', 'an image that has been loaded')),
         description='Geometry source used when sampling',
         default='OBJECT', update=updateOperationValid)
     cutter_type = EnumProperty(name='Cutter',
@@ -682,7 +689,10 @@ class camOperation(bpy.types.PropertyGroup):
     path_hidden = BoolProperty(name="Path hidden",description="True if the path was hidden before selection", default=False)
     #####update and tags and related
     changed = BoolProperty(name="True if any of the operation settings has changed",description="mark for update", default=False)
-    update_zbufferimage_tag = BoolProperty(name="mark zbuffer image for update",description="mark for update", default=True)
+    update_zbufferimage_tag = BoolProperty(
+            name="mark zbuffer image for update",
+            description="mark for update",
+            default=True)
     update_offsetimage_tag = BoolProperty(name="mark offset image for update",description="mark for update", default=True)
     update_silhouete_tag = BoolProperty(name="mark silhouete image for update",description="mark for update", default=True)
     update_ambient_tag = BoolProperty(name="mark ambient polygon for update",description="mark for update", default=True)

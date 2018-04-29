@@ -19,6 +19,7 @@
 #
 # ***** END GPL LICENCE BLOCK *****
 
+import logging
 import numpy
 import math
 import time
@@ -1577,36 +1578,54 @@ def getResolution(o):
 
 #def renderZbuffer():
 
-#this basically renders blender zbuffer and makes it accessible by saving & loading it again.
-#that's because blender doesn't allow accessing pixels in render :(
-def renderSampleImage(o):
-    t=time.time()
+def renderSampleImage(operation):
+    """This basically renders blender zbuffer and makes it accessible
+    by saving & loading it again.
+    That's because blender doesn't allow accessing pixels in render :(
+    """
+    logging.debug("TRACE renderSampleImage operation [%s]", operation)
+    start_time = time.time()
     progress('getting zbuffer')
     #print(o.zbuffer_image)
-    
 
-    if o.geometry_source=='OBJECT' or o.geometry_source=='GROUP':
+    o = operation
+    t = start_time
 
-        sx=o.max.x-o.min.x
-        sy=o.max.y-o.min.y
-    
-        resx=ceil(sx/o.pixsize)+2*o.borderwidth
-        resy=ceil(sy/o.pixsize)+2*o.borderwidth
-        
-        if not o.update_zbufferimage_tag and len(o.zbuffer_image)==resx and len(o.zbuffer_image[0])==resy :#if we call this accidentally in more functions, which currently happens...
-            #print('has zbuffer')
+    logging.debug("TRACE renderSampleImage geomytry source is [%s]",
+                  operation.geometry_source)
+    if operation.geometry_source in ('OBJECT', 'GROUP'):
+        length_x = operation.max.x - operation.min.x
+        length_y = operation.max.y - operation.min.y
+
+        sx = length_x
+        sy = length_y
+
+        logging.debug("TRACE renderSampleImage pixsize [%d] borderwidth [%d]",
+                      operation.pixsize, operation.borderwidth)
+        resx = ceil(length_x / operation.pixsize) + 2 * operation.borderwidth
+        resy = ceil(length_y / operation.pixsize) + 2 * operation.borderwidth
+
+        # If we call this accidentally in more functions, which currently
+        # happens...
+        if not o.update_zbufferimage_tag \
+           and len(o.zbuffer_image) == resx \
+           and len(o.zbuffer_image[0]) == resy:
+            logging.debug("TRACE renderSampleImage has zbuffer")
             return o.zbuffer_image
-        ####setup image name
-        #fn=bpy.data.filepath
-        #iname=bpy.path.abspath(fn)
-        #l=len(bpy.path.basename(fn))
-        iname=getCachePath(o)+'_z.exr'
+        # setup image name
+        iname = getCachePath(o)+'_z.exr'
         if not o.update_zbufferimage_tag:
+            logging.debug("TRACE renderSampleImage update_zbufferimage_tag "
+                          "is False")
             try:
-                i=bpy.data.images.load(iname)
+                image_data = bpy.data.images.load(iname)
+                i = image_data
+                logging.debug("TRACE renderSampleImage load image success")
             except:
-                o.update_zbufferimage_tag=True
+                o.update_zbufferimage_tag = True
         if o.update_zbufferimage_tag:
+            logging.debug("TRACE renderSampleImage update_zbufferimage_tag "
+                          "is (now) True")
             s=bpy.context.scene
         
             #prepare nodes first
