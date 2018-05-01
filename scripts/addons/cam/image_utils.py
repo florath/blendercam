@@ -1635,10 +1635,16 @@ def renderSampleImage(operation):
             n.links.clear()
             n.nodes.clear()
             n1=n.nodes.new('CompositorNodeRLayers')
+            print("LOG")
+            print(n1)
+            print(dir(n1))
+            print(n1.outputs)
+            print(dir(n1.outputs))
+            print(n1.outputs.keys())
             n2=n.nodes.new('CompositorNodeViewer')
             n3=n.nodes.new('CompositorNodeComposite')
-            n.links.new(n1.outputs['Z'],n2.inputs['Image'])
-            n.links.new(n1.outputs['Z'],n3.inputs['Image']) 
+            n.links.new(n1.outputs['Depth'],n2.inputs['Image'])
+            n.links.new(n1.outputs['Depth'],n3.inputs['Image']) 
             n.nodes.active=n2
             ###################
                 
@@ -1715,6 +1721,14 @@ def renderSampleImage(operation):
         a=1.0-a
         o.zbuffer_image=a
         o.update_zbufferimage_tag=False
+
+        print("LOG 2")
+        print(n1)
+        print(dir(n1))
+        print(n1.outputs)
+        print(dir(n1.outputs))
+        print(n1.outputs.keys())
+        ###assert False
         
     else:
         i=bpy.data.images[o.source_image_name]

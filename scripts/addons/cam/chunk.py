@@ -972,10 +972,10 @@ def meshFromCurve(o, use_modifiers = False):
 
     #first, convert to mesh to avoid parenting issues with hooks, then apply locrotscale.
     bpy.ops.object.convert(target='MESH', keep_original=False)
-	#bpy.ops.object.mode_set(mode = 'EDIT')
-	#bpy.ops.mesh.select_all(action = 'SELECT')
-	#print(bpy.ops.mesh.remove_doubles(threshold = 0.0001))
-	#bpy.ops.object.mode_set(mode = 'OBJECT')
+        #bpy.ops.object.mode_set(mode = 'EDIT')
+        #bpy.ops.mesh.select_all(action = 'SELECT')
+        #print(bpy.ops.mesh.remove_doubles(threshold = 0.0001))
+        #bpy.ops.object.mode_set(mode = 'OBJECT')
     
     if use_modifiers:
         newmesh = co.to_mesh(bpy.context.scene, True, 'RENDER')
@@ -1057,25 +1057,25 @@ def chunksTessalate(chunks, distance):
         for ch in chunks:
             newchunk = []
             vprev = Vector(ch.points[0])
-			dsum = 0
-			cnt = 0
-			for s in ch.points:
-				vnext = Vector(s)
-				v = vnext - vprev
-				dsum += v.length
-				cnt += 1
-				vprev = vnext
+            dsum = 0
+            cnt = 0
+            for s in ch.points:
+                vnext = Vector(s)
+                v = vnext - vprev
+                dsum += v.length
+                cnt += 1
+                vprev = vnext
         
-			dsum /= cnt
-			if (dsum < distance):
-				distance = dsum
-				
-			vprev = Vector(ch.points[0])
+            dsum /= cnt
+            if (dsum < distance):
+                distance = dsum
+
+            vprev = Vector(ch.points[0])
             for s in ch.points:
                 vnext = Vector(s)
                 v = vnext - vprev
                 d = v.length
-                
+
                 if d > distance:
                     v.normalize()
                     i = round(d / distance + 0.5)

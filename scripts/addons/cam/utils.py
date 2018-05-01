@@ -99,19 +99,19 @@ def getBoundsWorldspace(obs, use_modifiers = False):
     minx=miny=minz=10000000
     for ob in obs:
         #bb=ob.bound_box
-		#mw=ob.matrix_world
+        #mw=ob.matrix_world
 
-		bbox_corners = [ob.matrix_world * Vector(corner) for corner in ob.bound_box]
+        bbox_corners = [ob.matrix_world * Vector(corner) for corner in ob.bound_box]
 
-		for corner in bbox_corners:
-			minx = min(minx, corner.x)
-			miny = min(miny, corner.y)
-			minz = min(minz, corner.z)
-			maxx = max(maxx, corner.x)
-			maxy = max(maxy, corner.y)
-			maxz = max(maxz, corner.z)
+        for corner in bbox_corners:
+            minx = min(minx, corner.x)
+            miny = min(miny, corner.y)
+            minz = min(minz, corner.z)
+            maxx = max(maxx, corner.x)
+            maxy = max(maxy, corner.y)
+            maxz = max(maxz, corner.z)
 
-		'''
+        NOTUSED = '''
         if ob.type=='MESH':
             if use_modifiers:
                 mesh = ob.to_mesh(bpy.context.scene, True, 'RENDER')
@@ -155,7 +155,7 @@ def getBoundsWorldspace(obs, use_modifiers = False):
                     maxx=max(maxx,worldCoord.x)
                     maxy=max(maxy,worldCoord.y)
                     maxz=max(maxz,worldCoord.z)
-		'''
+                '''
     #progress(time.time()-t)
     return minx,miny,minz,maxx,maxy,maxz
 
@@ -247,21 +247,20 @@ def getChangeData(o):
 def getBounds(o):
     #print('kolikrat sem rpijde')
     if o.geometry_source=='OBJECT' or o.geometry_source=='GROUP':
-		minx,miny,minz,maxx,maxy,maxz = getBoundsWorldspace(o.objects, o.use_modifiers)
+        minx,miny,minz,maxx,maxy,maxz = getBoundsWorldspace(o.objects, o.use_modifiers)
+        if o.material_from_model:
 
-		if o.material_from_model:
             o.min.x=minx-o.material_radius_around_model
             o.min.y=miny-o.material_radius_around_model
-			o.max.z=max(o.maxz, maxz)
+            o.max.z=max(o.maxz, maxz)
                 
             if o.minz_from_ob:
-					o.minz = o.min.z = minz
+                o.minz = o.min.z = minz
             else:
                 o.min.z=o.minz#max(bb[0][2]+l.z,o.minz)#
             
             o.max.x=maxx+o.material_radius_around_model
             o.max.y=maxy+o.material_radius_around_model
-			
         else:
             o.min.x=o.material_origin.x
             o.min.y=o.material_origin.y
@@ -269,8 +268,8 @@ def getBounds(o):
             o.max.x=o.min.x+o.material_size.x
             o.max.y=o.min.y+o.material_size.y
             o.max.z=o.material_origin.z
-			if o.minz_from_ob:
-				o.minz = minz
+            if o.minz_from_ob:
+                o.minz = minz
             
     else:
         i=bpy.data.images[o.source_image_name]
@@ -295,7 +294,7 @@ def getBounds(o):
         o.max.y=o.source_image_offset.y+(ey)*o.pixsize
         o.min.z=o.source_image_offset.z+o.minz
         o.max.z=o.source_image_offset.z
-		
+
     s=bpy.context.scene
     m=s.cam_machine
     if o.max.x-o.min.x>m.working_area.x or o.max.y-o.min.y>m.working_area.y or o.max.z-o.min.z>m.working_area.z:
@@ -1731,7 +1730,7 @@ def getObjectSilhouete(stype, objects=None, use_modifiers = False):
     #o=operation
     if stype=='CURVES':#curve conversion to polygon format
         allchunks=[]
-		print('curve to chunk for silhouette')
+        print('curve to chunk for silhouette')
         for ob in objects:
             chunks=curveToChunks(ob)
             allchunks.extend(chunks)
@@ -2723,9 +2722,9 @@ def strategy_medial_axis( o ):
     
     # calculate maximum cut depth based on the type of cutter used
     if o.cutter_type=='VCARVE':
-	maxdepth = -slope * o.cutter_diameter/2
+        maxdepth = -slope * o.cutter_diameter/2
     elif o.cutter_type=='BALLNOSE' or o.cutter_type=='BALL':
-		maxdepth = -o.cutter_diameter/2
+        maxdepth = -o.cutter_diameter/2
     else:
         # allow other cutter shapes but give a warning
         o.warnings += 'This cutter not fully supported, only Ballnose, Ball and V-carve cutters are'
@@ -2752,7 +2751,7 @@ def strategy_medial_axis( o ):
         nVerts = len(verts)
         print("Tesselation... ("+str(nVerts)+" points)")
         
-		pts, edgesIdx = computeVoronoiDiagram(verts, 1, 1, polygonsOutput=False, formatOutput=True)
+        pts, edgesIdx = computeVoronoiDiagram(verts, 1, 1, polygonsOutput=False, formatOutput=True)
         
         newIdx = 0
         vertr = []
@@ -2780,7 +2779,7 @@ def strategy_medial_axis( o ):
                 # adjust for z starting position other than 0 : user operation depth start
                 z += o.maxz
                 # limit z depth
-				if z < maxdepth:
+                if z < maxdepth:
                     z = maxdepth
                 #print(mpoly.distance(sgeometry.Point(0,0)))
                 #if(z!=0):print(z)
