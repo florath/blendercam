@@ -550,7 +550,7 @@ def fixUnits():
 		
 	s.unit_settings.system_rotation='DEGREES'	
 	
-	s.unit_settings.scale_length=0.001 # Blender CAM doesn't respect this property and there were users reporting problems, not seeing this was changed. 
+	##s.unit_settings.scale_length=0.001 # Blender CAM doesn't respect this property and there were users reporting problems, not seeing this was changed. 
 	
 class CamOperationAdd(bpy.types.Operator):
 	'''Add new CAM operation'''

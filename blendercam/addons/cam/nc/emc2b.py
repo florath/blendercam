@@ -7,8 +7,8 @@ import time
 now = datetime.datetime.now()
 
 class Creator(iso_modal.Creator):
-    def __init__(self):
-        iso_modal.Creator.__init__(self)
+    def __init__(self, scale_length):
+        iso_modal.Creator.__init__(self, scale_length)
         self.output_block_numbers = False
         self.output_tool_definitions = False
         self.output_g43_on_tool_change_line = True
@@ -42,4 +42,4 @@ class Creator(iso_modal.Creator):
         iso_modal.Creator.program_begin(self, id, comment)
 
 
-nc.creator = Creator()
+nc.creator = Creator(scale_length=0.001)

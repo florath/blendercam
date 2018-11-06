@@ -1,4 +1,28 @@
+'''
+Format Numbers
+'''
+
+import math
+
 class Format:
+    '''Format numbers'''
+
+    def __init__(self, scale=1, number_of_decimal_places = 3):
+        self.__number_of_decimal_places = number_of_decimal_places
+        self.__scale = scale
+
+    def string(self, number):
+        if number == None:
+            return 'None'
+        if isinstance(number, str):
+            number = float(number)
+        if not isinstance(number, float):
+            print("TTTTTTTTTTTTTTTTTT ", type(number), number)
+        assert isinstance(number, float) or isinstance(number, int)
+        return ("%%.%df" % self.__number_of_decimal_places) % (number * self.__scale)
+
+
+class OrigFormat:
     def __init__(self, number_of_decimal_places = 3, add_leading_zeros = 1, add_trailing_zeros = False, dp_wanted = True, add_plus = False, no_minus = False, round_down = False):
         self.number_of_decimal_places = number_of_decimal_places
         self.add_leading_zeros = add_leading_zeros # fill the start of the number with zeros, so there are at least this number of digits before the decimal point
@@ -9,15 +33,27 @@ class Format:
         self.round_down = round_down
 
     def string(self, number):
+        '''Convert a floating point number into a string
+
+        Using the format configuration as passed in during
+        construction.
+        '''
+        # Handle the 'None' case
         if number == None:
             return 'None'
+
+        # Convert to expotent float and string
         f = float(number) * math.pow(10, self.number_of_decimal_places)
         s = str(f)
+        print("SSSSSSSSSSSSSSSSSSSSS 0", s)
         
         if self.round_down == False:
-            if f < 0: f = f - .5
-            else: f = f + .5
+            if f < 0:
+                f = f - .5
+            else:
+                f = f + .5
             s = str(number)
+            print("SSSSSSSSSSSSSSSSSSSSS 1", s)
             
         if math.fabs(f) < 1.0:
             s = '0'

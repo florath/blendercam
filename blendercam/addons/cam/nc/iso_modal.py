@@ -12,11 +12,11 @@ import math
 ################################################################################
 class Creator(iso.Creator):
 
-    def __init__(self):
-        iso.Creator.__init__(self)
+    def __init__(self, scale_length):
+        iso.Creator.__init__(self, scale_length)
         self.f_modal = True
         self.g0123_modal = True
         self.drill_modal = True
 ################################################################################
 
-nc.creator = Creator()
+nc.creator = Creator(scale_length=0.001)

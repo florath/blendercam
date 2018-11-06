@@ -13,7 +13,7 @@ from .format import *
 ################################################################################
 class Creator(nc.Creator):
 
-	def __init__(self):
+	def __init__(self, scale_length):
 		nc.Creator.__init__(self)
 
 		# internal variables
@@ -46,7 +46,7 @@ class Creator(nc.Creator):
 		self.useCrc = False
 		self.useCrcCenterline = False
 		self.gCRC = ''
-		self.fmt = Format()
+		self.fmt = Format(scale=scale_length)
 		self.absolute_flag = True
 		self.ffmt = Format(number_of_decimal_places = 2)
 		self.sfmt = Format(number_of_decimal_places = 1)
@@ -1338,4 +1338,4 @@ class Creator(nc.Creator):
 
 ################################################################################
 
-nc.creator = Creator()
+nc.creator = Creator(scale_length=0.001)

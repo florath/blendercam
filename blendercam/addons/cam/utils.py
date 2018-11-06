@@ -1129,7 +1129,7 @@ def exportGcodePath(filename,vertslist,operations):
         if split:
             fileindex='_'+str(findex)
         filename=basefilename+fileindex+extension
-        c=postprocessor.Creator()
+        c=postprocessor.Creator(scale_length=bpy.context.scene.unit_settings.scale_length)
 
         # process user overrides for post processor settings
         
