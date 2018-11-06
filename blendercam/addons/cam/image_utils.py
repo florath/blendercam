@@ -1313,7 +1313,8 @@ def imageToChunks(o,image, with_border=False):
     
     #progress('detecting outline')
     edges=[]
-    ar = image[:,:-1]-image[:,1:] 
+    # ar = image[:,:-1]-image[:,1:]  The '-' operator is not available any more
+    ar = image[:,:-1] ^ image[:,1:] 
     
     indices1=ar.nonzero()
     borderspread=2#o.cutter_diameter/o.pixsize#when the border was excluded precisely, sometimes it did remove some silhouette parts
@@ -1330,7 +1331,7 @@ def imageToChunks(o,image, with_border=False):
         if r<a<w-r and r<b<h-r:
             edges.append(((a-1,b),(a,b)))
                     
-    ar=image[:-1,:]-image[1:,:]
+    ar=image[:-1,:] ^ image[1:,:]
     indices2=ar.nonzero()
     for id in range(0,len(indices2[0])):
         a=indices2[0][id]
